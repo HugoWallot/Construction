@@ -1,0 +1,2343 @@
+---
+title: "Construction"
+author: "Hugo"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+  workflowr::wflow_html:
+    toc: true
+    toc_depth: 6
+    toc_float: false
+    code_folding: hide
+  chunk_output_type: console
+params: 
+ Developer_mode: FALSE
+ tests: TRUE
+---
+
+# initial date 2021-06-17 
+Notes to readers : 
+  There is a lot of missing data on building permits which might cause irregularity in the table.
+  The first three code of : code and function parameters need to be updated once a year in early march.
+
+# Introduction
+
+-   Investment in Building Construction(monthly) [34-10-0175-01](https://www150.statcan.gc.ca/t1/tbl1/en/cv.action?pid=3410017501)
+
+
+- Capital and repair expenditures, non-residential tangible assets, by industry and geography (x1,000,00) [34-10-0035-01](https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=3410003501)
+
+-   Building permits, by type of structure and type of work [34-10-0066-01](https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=3410006601&pickMembers%5B0%5D=1.7&pickMembers%5B1%5D=3.1&pickMembers%5B2%5D=4.1&pickMembers%5B3%5D=5.1&cubeTimeFrame.startMonth=01&cubeTimeFrame.startYear=2019&cubeTimeFrame.endMonth=12&cubeTimeFrame.endYear=2020&referencePeriods=20190101%2C20201201)
+
+## Notes and important informations
+```{r important notes, include=FALSE}
+# The package rmarkdown must be set as library before running any other code or R studio might crash.
+
+# Sys.setenv(LANG = "en") # use to turn error message to english in order to quick google search information if needed
+
+
+```
+
+
+## packages needed
+
+Here's a list of all the necessery package to run the program.
+
+
+```{r setup , message=FALSE, echo=FALSE, warning=FALSE, include=params$Developer_mode}
+
+# install.packages("rmarkdown")
+# install.packages("tidyverse")
+# install.packages("DT")
+# install.packages("cansim")
+# install.packages("janitor")
+# install.packages("here")
+# install.packages("plotly") #added by Hugo 
+# install.packages("summarytools")
+# install.packages("gapminder")
+
+
+library(rmarkdown) # to avoid fatal error when running chunk of code
+library(tidyverse) # all the tools I need to manipulate and graph data.
+library(DT) # for creating the interactive table
+library(janitor) # for cleaning table names
+library(cansim) # for downloading NDM tables
+library(here) # for managing folder paths.
+library(plotly) # for building interactive graph
+library(summarytools) # quickly summarise data
+library(gapminder) # used in test example
+library(tsibble) # needed for functions
+library(params) # needed to compile
+
+# If you get fatal error or R studio crashes, open an untitle new R doc. Copypaste the install functions. Run the function, then go to packages in the middle right of R studio (under global environment) and search mannually for the packages to set them as library by clicking on the square next to their names.
+
+```
+
+
+## Core functions and parameters
+
+This section includes global function of which many have been imported from the Provincial_view.rmd on which Arman worked on. The parameters from_this_year, Incomplete_Year1 and Incomplete_Year2 must be changed for the proper year, once a year in early march.
+
+
+```{r core functions and parameters, echo=FALSE}
+
+# paramters for the project : This year can be changed to extand the length of the final tables.
+from_this_year <- "2016-12-29"
+
+#This part of the code is used to get rid of incomplete columns which cause distortion in the percent change and first difference value.
+
+Incomplete_Year1 <- "2017"
+Incomplete_Year2 <- "2021"
+
+
+## codelists 
+
+two_digit_naics_code <- c("[11]", "[21]", "[22]", "[23]", "[31-33]", "[41]", "[44-45]", "[48-49]", "[51]", "[52]", "[53]", "[54]", "[55]", "[56]", "[61]", "[62]", "[71]", "[72]", "[81]", "[91]")
+
+provinces <- c(
+  "Alberta", "British Columbia", "Canada", "Manitoba", "New Brunswick", "Newfoundland and Labrador", "Nova Scotia", "Ontario", "Prince Edward Island", "Quebec", "Saskatchewan", "Northwest Territories", "Nunavut", "Yukon", "Yellowknife, Northwest Territories", "Whitehorse, Yukon", "Iqaluit, Nunavut")
+
+#table numbers
+building_construction_table_number <- "34-10-0175-01"
+capital_repair_expenditure_table_number <- "34-10-0035-01"
+building_permits_table_number <- "34-10-0066-01 "
+
+provincial_two_digit_cord <- c("1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.1.10", "1.1.11", "1.1.12", "1.1.13", "1.1.14", "1.1.15", "1.1.16", "1.1.17", "1.1.18", "1.1.19", "1.1.20", "1.1.21", "2.1.1", "2.1.2", "2.1.3", "2.1.4", "2.1.5", "2.1.6", "2.1.7", "2.1.8", "2.1.9", "2.1.10", "2.1.11", "2.1.12", "2.1.13", "2.1.14", "2.1.15", "2.1.16", "2.1.17", "2.1.18", "2.1.19", "2.1.20", " 2.1.21", "3.1.1", "3.1.2", "3.1.3", "3.1.4", "3.1.5", "3.1.6", "3.1.7", "3.1.8", "3.1.9", "3.1.10", "3.1.11", "3.1.12", "3.1.13", "3.1.14", "3.1.15", "3.1.16", "3.1.17", "3.1.18", "3.1.19", "3.1.20", "3.1.21", "4.1.1", "4.1.2", "4.1.3", "4.1.4", "4.1.5", "4.1.6", "4.1.7", "4.1.8", "4.1.9", "4.1.10", "4.1.11", "4.1.12", "4.1.13", "4.1.14", "4.1.15", "4.1.16", "4.1.17", "4.1.18", "4.1.19", "4.1.20", "4.1.21", "5.1.1", "5.1.2", "5.1.3", "5.1.4", "5.1.5", "5.1.6", "5.1.7", "5.1.8", "5.1.9", "5.1.10", "5.1.11", "5.1.12", "5.1.13", "5.1.14", "5.1.15", "5.1.16", "5.1.17", "5.1.18", "5.1.19", "5.1.20", "5.1.21", "6.1.1", "6.1.2", "6.1.3", "6.1.4", "6.1.5", "6.1.6", "6.1.7", "6.1.8", "6.1.9", "6.1.10", "6.1.11", "6.1.12", "6.1.13", "6.1.14", "6.1.15", "6.1.16", "6.1.17", "6.1.18", "6.1.19", "6.1.20", "6.1.21", "7.1.1", "7.1.2", "7.1.3", "7.1.4", "7.1.5", "7.1.6", "7.1.7", "7.1.8", "7.1.9", "7.1.10", "7.1.11", "7.1.12", "7.1.13", "7.1.14", "7.1.15", "7.1.16", "7.1.17", "7.1.18", "7.1.19", "7.1.20", "7.1.21", "8.1.1", "8.1.2", "8.1.3", "8.1.4", "8.1.5", "8.1.6", "8.1.7", "8.1.8", "8.1.9", "8.1.10", "8.1.11", "8.1.12", "8.1.13", "8.1.14", "8.1.15", "8.1.16", "8.1.17", "8.1.18", "8.1.19", "8.1.20", "8.1.21", "9.1.1", "9.1.2", "9.1.3", "9.1.4", "9.1.5", "9.1.6", "9.1.7", "9.1.8", "9.1.9", "9.1.10", "9.1.11", "9.1.12", "9.1.13", "9.1.14", "9.1.15", "9.1.16", "9.1.17", "9.1.18", "9.1.19", "9.1.20", "9.1.21", "10.1.1", "10.1.2", "10.1.3", "10.1.4", "10.1.5", "10.1.6", "10.1.7", "10.1.8", "10.1.9", "10.1.10", "10.1.11", "10.1.12", "10.1.13", "10.1.14", "10.1.15", "10.1.16", "10.1.17", "10.1.18", "10.1.19", "10.1.20", "10.1.21", "11.1.1", "11.1.2", "11.1.3", "11.1.4", "11.1.5", "11.1.6", "11.1.7", "11.1.8", "11.1.9", "11.1.10", "11.1.11", "11.1.12", "11.1.13", "11.1.14", "11.1.15", "11.1.16", "11.1.17", "11.1.18", "11.1.19", "11.1.20", "11.1.21", "12.1.1", "12.1.2", "12.1.3", "12.1.4", "12.1.5", "12.1.6", "12.1.7", "12.1.8", "12.1.9", "12.1.10", "12.1.11", "12.1.12", "12.1.13", "12.1.14", "12.1.15", "12.1.16", "12.1.17", "12.1.18", "12.1.19", "12.1.20", "12.1.21", "13.1.1", "13.1.2", "13.1.3", "13.1.4", "13.1.5", "13.1.6", "13.1.7", "13.1.8", "13.1.9", "13.1.10", "13.1.11", "13.1.12", "13.1.13", "13.1.14", "13.1.15", "13.1.16", "13.1.17", "13.1.18", "13.1.19", "13.1.20", "13.1.21", "14.1.1", "14.1.2", "14.1.3", "14.1.4", "14.1.5", "14.1.6", "14.1.7", "14.1.8", "14.1.9", "14.1.10", "14.1.11", "14.1.12", "14.1.13", "14.1.14", "14.1.15", "14.1.16", "14.1.17", "14.1.18", "14.1.19", "14.1.20", "14.1.21")
+
+
+#functions from Arman :
+# Message from Arman : here I will describe the functions required in the project. the most important one is the one for creating interactive tables in the browser that allow you to change which columns to show and to search through tables. it is important for the search function and performance for the columns to be categories and/or numerics.
+
+
+    # fd = first difference          pc = Percent Change
+fd_pc <- list(
+            fd = ~(.x - lag(.x)),
+            pc = ~((.x / lag(.x)- 1) * 100))
+
+
+    # This is the template table which will show the data
+interactive_table <- function(data) {
+  DT::datatable(
+    {{ data }},
+    extensions = c("ColReorder", "Buttons"), options = list(
+      colReorder = TRUE,
+      dom = "Bfrtip",
+      buttons = c("copy", "csv", I("colvis")),
+      searchHighlight = TRUE,
+      search = list(regex = TRUE)
+    ),
+    filter = "top"
+  )
+}
+
+# test for the interactive table
+# interactive_table(gapminder::gapminder)
+# summarytools::view(dfSummary(LFS))  for exploring tables
+
+```
+
+
+### paths
+
+all the files in this program will now be created relative to where you run this script; it will create all the necessary subflorder and files from the location below
+
+```{r location,  echo=FALSE, include=FALSE}
+here()
+```
+
+# construction investment database
+
+```{r database for consruction investment,  echo=FALSE, include=FALSE}
+#Loading the data base - using cansim function to obtain the ndm format of the table.
+
+Building_Construction <- cansim::get_cansim(building_construction_table_number)
+Building_Construction <- janitor::clean_names(Building_Construction) # get rid of capital letters in col names
+
+
+
+```
+
+
+## Building construction investment, monthly unadjusted constant K$
+
+```{r building Construction investment monthly unajusted constant K$ , include=FALSE}
+# building Construction investment, monthly unajusted constant K$
+# table 34-10-0175-01 : Building construction 
+
+Building_Construction %>%
+  select(ref_date, geo, type_of_structure, type_of_work, investment_value, value) %>% #selected and keep only variable based on their column name
+  mutate(ref_date = parse_date(ref_date, "%Y-%m")) %>% #turn format from : year-month  to date format
+  filter(ref_date > from_this_year) -> #keep only variable based on their value and use from_this_year (line 55-56) as reference of where to start
+  Transit_Building_Construction_Monthly_Unajusted_Constant #used in dynamic graph for easier formatting
+
+Transit_Building_Construction_Monthly_Unajusted_Constant %>%
+  mutate(ref_date = format(ref_date, "%Y-%b")) %>%
+  filter(geo %in% provinces) %>% #use to only keep geographic value with either provinces name or Canada to get rid of the metropolitean area
+  filter(type_of_work %in% "Types of work, total") %>% #only keep the total type of work
+  select(!type_of_work) %>% #get rid of type of work column
+  filter(investment_value %in% c("Unadjusted - constant")) %>% #keep only unajusted constant value
+  select(!investment_value) %>% #get rid of investment_value column
+  pivot_wider(names_from = ref_date, values_from = value)-> #turn the ref_date into columns of value
+  #clean_names() %>% #avoid transcription mistakes while using
+  #rename_if(is.numeric, funs(str_c(., "_investment"))) -> # changing names of columns
+  Clean_Building_Construction_Monthly_Unajusted_Constant
+#`funs()` was deprecated in dplyr 0.8.0. Please use a list of either functions or lambdas: 
+  # Simple named list: # list(mean = mean, median = median)
+  # Auto named with `tibble::lst()`: # tibble::lst(mean, median)
+  # Using lambdas # list(~ mean(., trim = .2), ~ median(., na.rm = TRUE))
+```
+
+
+## Investment in building construction, monthly, unadjusted constant K$ Table
+```{r building Construction investment Monthly unajusted constant K$ interactive table,  echo=FALSE}
+interactive_table(Clean_Building_Construction_Monthly_Unajusted_Constant) #create the interactive data table.
+
+```
+
+### Investment in building construction, monthly, unadjusted constant K$ Graph code
+
+```{r building Construction investment Monthly unajusted constant K$ Graph, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+
+#Graph 1 : QC, AB, BC, ON
+Transit_Building_Construction_Monthly_Unajusted_Constant %>%
+  filter(geo %in% c("Quebec", "Ontario", "Alberta", "British Columbia")) %>%
+  filter(type_of_structure %in% c("Total residential", "Total non-residential")) %>%
+  filter(type_of_work %in% c("Types of work, total")) %>%
+  filter(investment_value %in% c("Unadjusted - constant")) %>%
+  ggplot() +
+  ggtitle("Investment in building construction, monthly, unadjusted constant K$ \n QC, AB, BC, ON") +
+  aes(x = ref_date, y = value, colour = geo) +
+  xlab("Year and month") + #grah axis names
+  ylab("Value \n ") +   #graph axis names
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() +
+  facet_grid(vars(type_of_structure))-> #facet_grid allow to have multiple graph simultaneously
+  Clean_Building_Construction_Monthly_Unadjusted_Constant_Graph_1
+
+#Graph 2 : MB, NB, NL, NS, PE, SK
+Transit_Building_Construction_Monthly_Unajusted_Constant %>%
+  filter(geo %in% c("Newfoundland and Labrador", "Prince Edward Island", "Nova Scotia", "New Brunswick", "Manitoba", "Saskatchewan")) %>%
+  filter(type_of_structure %in% c("Total residential", "Total non-residential")) %>%
+  filter(type_of_work %in% c("Types of work, total")) %>%
+  filter(investment_value %in% c("Unadjusted - constant")) %>%
+  ggplot() +
+  ggtitle("Investment in building construction, monthly, unadjusted constant K$ \n MB, NB, NL, NS, PE, SK") +
+  aes(x = ref_date, y = value, colour = geo) +
+  xlab("Year and month") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() +
+  facet_grid(vars(type_of_structure))->
+  Clean_Building_Construction_Monthly_Unadjusted_Constant_Graph_2
+
+#Graph 3 : NT, NU, YT
+Transit_Building_Construction_Monthly_Unajusted_Constant %>%
+  filter(geo %in% c("Yukon", "Northwest Territories", "Nunavut")) %>%
+  filter(type_of_structure %in% c("Total residential", "Total non-residential")) %>%
+  filter(type_of_work %in% c("Types of work, total")) %>%
+  filter(investment_value %in% c("Unadjusted - constant")) %>%
+  ggplot() +
+  ggtitle("Investment in building construction, monthly, unadjusted constant K$ \n NT, NU, YT") +
+  aes(x = ref_date, y = value, colour = geo) +
+  xlab("Year and month") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() +
+  facet_grid(vars(type_of_structure))->
+  Clean_Building_Construction_Monthly_Unadjusted_Constant_Graph_3
+```
+
+### Investment in building construction, monthly, unadjusted constant K$ graph 1, total residential, Type of work, QC, AB, BC, ON
+```{r building Construction investment Monthly unajusted constant K$ line Graph 1, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Construction_Monthly_Unadjusted_Constant_Graph_1, dynamicTicks =  TRUE)
+```
+
+### Investment in building construction, monthly, unadjusted constant K$ graph 2, total residential, Type of work, MB, NB, NL, NS, PE, SK
+```{r building Construction investment Monthly unajusted constant K$ line Graph 2, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Construction_Monthly_Unadjusted_Constant_Graph_2, dynamicTicks =  TRUE)
+```
+
+### Investment in building construction, monthly, unadjusted constant K$ graph 3, total residential, Type of work, NT, NU, YT
+```{r building Construction investment Monthly unajusted constant K$ line Graph 3, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Construction_Monthly_Unadjusted_Constant_Graph_3, dynamicTicks =  TRUE)
+```
+
+
+## Building construction investment annually unadjusted constant K$
+
+```{r building Construction investment annually unajusted constant K$,  echo=FALSE , include=FALSE}
+# building Construction investment, annually unajusted constant K$
+# table 34-10-0175-01 : Building construction 
+
+
+Building_Construction %>%
+  select(ref_date, geo, type_of_structure, type_of_work, investment_value, value) %>% #selected and keep only variable based on their column name
+  mutate(ref_date = parse_date(ref_date, "%Y-%m")) %>% #turn format from : year-month  to date format
+  filter(ref_date > from_this_year) %>% #keep only variable based on their value and use from_this_year (line 55-56) as reference of where to start
+  filter(geo %in% provinces) %>% #use line 82-83 to only keep geographic value with either provinces name or Canada to get rid of the metropolitean area
+  filter(type_of_work %in% "Types of work, total") %>% #only keep the total type of work
+  select(!type_of_work) %>% #get rid of type of work column
+  filter(investment_value %in% c("Unadjusted - constant")) %>% #keep only unajusted constant value
+  select(!investment_value) %>% #get rid of investment_value column
+  rename_if(is.numeric, funs(str_c(., "_investment_unadjusted_K$"))) -> Clean_Building_Construction_Annually_Unajusted_Constant
+
+data_Construction_investment_tsbl_Unajusted_Constant <- as_tsibble(Clean_Building_Construction_Annually_Unajusted_Constant, key = c(geo, type_of_structure)) #set keys for the following function
+data_Construction_investment_tsbl_Unajusted_Constant %>%
+  group_by_key() %>%
+  index_by(year_month = ~ year(.)) %>% #using year, create new columns with value from the summarize function for each year
+  summarise(
+    'value' = sum(`value_investment_unadjusted_K$`, na.rm = TRUE),
+  ) -> Clean_Building_Construction_Annually_Unajusted_Constant
+
+Clean_Building_Construction_Annually_Unajusted_Constant %>%
+   mutate(across(where(is.character), as.factor)) %>% #turn the charater into factor and keep the factor as factor.
+  arrange(type_of_structure, geo, year_month) %>% #order the data by factors
+  group_by(type_of_structure, geo) %>% #group the data by factors other than ref_date
+  mutate(across(where(is.numeric), fd_pc, .names = "{.col}_{.fn}")) %>% #create two columns based on the fd_pc function
+   mutate(across(where(is.numeric), round, 3)) %>% #set to 3 decimals
+    select(order(colnames(.))) %>% #order the columns by alphabetics names
+  relocate(where(is.numeric), .after = where((is.factor))) %>% #place numeric columns after factors columns
+  relocate(`year_month`)  %>%  #place ref_date as first column
+  select(!year_month_fd) %>% #get rid of useless columns
+  select(!year_month_pc) -> #get rid of useless columns
+  Transit_Building_Construction_Annually_Unajusted_Constant
+
+
+as_tibble(Transit_Building_Construction_Annually_Unajusted_Constant) %>%
+  pivot_wider(names_from = year_month, values_from = c(`value`, `value_fd`, `value_pc`)) %>%
+  select(!str_c("value_fd_", Incomplete_Year1)) %>% #get rid of useless columns
+  select(!str_c("value_fd_", Incomplete_Year2)) %>% #get rid of useless columns
+  select(!str_c("value_pc_", Incomplete_Year1)) %>% #get rid of useless columns
+  select(!str_c("value_pc_", Incomplete_Year2)) -> #get rid of useless columns
+Clean_Building_Construction_Annually_Unajusted_Constant
+
+```
+
+## Investment in building construction, annually, unadjusted constant K$ Table
+fd = first difference; pc = percent change
+```{r building Construction investment annually unajusted constant K$ interactive table,  echo=FALSE}
+interactive_table(Clean_Building_Construction_Annually_Unajusted_Constant)
+
+```
+
+### Investment in building construction, annually, unadjusted constant K$ Graph code
+
+```{r building Construction investment annually unajusted constant K$ Graph, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+
+#graph 1 with constant value AB, QC, ON, BC
+Transit_Building_Construction_Annually_Unajusted_Constant %>%
+  filter(geo %in% c("Quebec", "Ontario", "Alberta", "British Columbia")) %>%
+  filter(!year_month %in% c(Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total residential", "Total non-residential")) %>%
+  ggplot() +
+  ggtitle("Investment in building construction, annually, unadjusted constant K$ \n AB, QC, ON, BC" ) +
+  aes(x = year_month, y = value, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() +
+  facet_grid(vars(type_of_structure)) ->
+  Clean_Building_Construction_Annually_Unadjusted_Constant_Graph_1
+
+#graph 2 with constant value MB, NB, NL, NS, PE, SK
+Transit_Building_Construction_Annually_Unajusted_Constant %>%
+  filter(geo %in% c("Newfoundland and Labrador", "Prince Edward Island", "Nova Scotia", "New Brunswick", "Manitoba", "Saskatchewan")) %>%
+  filter(!year_month %in% c(Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total residential", "Total non-residential")) %>%
+  ggplot() +
+  ggtitle("Investment in building construction, annually, unadjusted constant K$ \n MB, NB, NL, NS, PE, SK") +
+  aes(x = year_month, y = value, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() +
+  facet_grid(vars(type_of_structure)) ->
+  Clean_Building_Construction_Annually_Unadjusted_Constant_Graph_2
+
+#graph 3 with constant value NT, NU, YT
+Transit_Building_Construction_Annually_Unajusted_Constant %>%
+  filter(geo %in% c("Yukon", "Northwest Territories", "Nunavut")) %>%
+  filter(!year_month %in% c(Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total residential", "Total non-residential")) %>%
+  ggplot() +
+  ggtitle("Investment in building construction, annually, unadjusted constant K$ \n NT, NU, YT") +
+  aes(x = year_month, y = value, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() +
+  facet_grid(vars(type_of_structure)) ->
+  Clean_Building_Construction_Annually_Unadjusted_Constant_Graph_3
+
+#graph 4 with constant value, First difference, QC, AB, BC, ON
+Transit_Building_Construction_Annually_Unajusted_Constant %>%
+  filter(geo %in% c("Quebec", "Ontario", "Alberta", "British Columbia")) %>%
+  filter(!year_month %in% c(Incomplete_Year1, Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total residential", "Total non-residential")) %>%
+  ggplot() +
+  ggtitle("Investment in building construction, annually, unadjusted constant K$ \n QC, AB, BC, ON") +
+  aes(x = year_month, y = value_fd, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() +
+  facet_grid(vars(type_of_structure)) ->
+  Clean_Building_Construction_Annually_Unadjusted_Constant_Graph_4
+
+#graph 5 with constant value, first difference, MB, NB, NL, NS, PE, SK
+Transit_Building_Construction_Annually_Unajusted_Constant %>%
+  filter(geo %in% c("Newfoundland and Labrador", "Prince Edward Island", "Nova Scotia", "New Brunswick", "Manitoba", "Saskatchewan")) %>%
+  filter(!year_month %in% c(Incomplete_Year1, Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total residential", "Total non-residential")) %>%
+  ggplot() +
+  ggtitle("Investment in building construction, annually, unadjusted constant K$ \n MB, NB, NL, NS, PE, SK") +
+  aes(x = year_month, y = value_fd, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() +
+  facet_grid(vars(type_of_structure)) ->
+  Clean_Building_Construction_Annually_Unadjusted_Constant_Graph_5
+
+#graph 6 with constant value, first difference, NT, NU, YT
+Transit_Building_Construction_Annually_Unajusted_Constant %>%
+  filter(geo %in% c("Yukon", "Northwest Territories", "Nunavut")) %>%
+  filter(!year_month %in% c(Incomplete_Year1, Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total residential", "Total non-residential")) %>%
+  ggplot() +
+  ggtitle("Investment in building construction, annually, unadjusted constant K$ \n NT, NU, YT") +
+  aes(x = year_month, y = value_fd, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() +
+  facet_grid(vars(type_of_structure)) ->
+  Clean_Building_Construction_Annually_Unadjusted_Constant_Graph_6
+
+#graph 7 with constant value, Percent change, QC, AB, BC, ON
+Transit_Building_Construction_Annually_Unajusted_Constant %>%
+  filter(geo %in% c("Quebec", "Ontario",  "Alberta", "British Columbia")) %>%
+  filter(type_of_structure %in% c("Total residential", "Total non-residential")) %>%
+  filter(!year_month %in% c(Incomplete_Year1, Incomplete_Year2)) %>% # get rid of the incomplete years
+  ggplot() +
+  ggtitle("Investment in building construction, annually, unadjusted constant K$ \n QC, AB, BC, ON") +
+  aes(x = year_month, y = value_pc, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() +
+  facet_grid(vars(type_of_structure)) ->
+  Clean_Building_Construction_Annually_Unadjusted_Constant_Graph_7
+
+#graph 8 with constant value, first difference, MB, NB, NL, NS, PE, SK
+Transit_Building_Construction_Annually_Unajusted_Constant %>%
+  filter(geo %in% c("Newfoundland and Labrador", "Prince Edward Island", "Nova Scotia", "New Brunswick", "Manitoba", "Saskatchewan")) %>%
+  filter(!year_month %in% c(Incomplete_Year1, Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total residential", "Total non-residential")) %>%
+  ggplot() +
+  ggtitle("Investment in building construction, annually, unadjusted constant K$ \n MB, NB, NL, NS, PE, SK") +
+  aes(x = year_month, y = value_pc, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() +
+  facet_grid(vars(type_of_structure)) ->
+  Clean_Building_Construction_Annually_Unadjusted_Constant_Graph_8
+
+#graph 9 with constant value, first difference, NT, NU, YT
+Transit_Building_Construction_Annually_Unajusted_Constant %>%
+  filter(geo %in% c("Yukon", "Northwest Territories", "Nunavut")) %>%
+  filter(!year_month %in% c(Incomplete_Year1, Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total residential", "Total non-residential")) %>%
+  ggplot() +
+  ggtitle("Investment in building construction, annually, unadjusted constant K$ \n NT, NU, YT") +
+  aes(x = year_month, y = value_pc, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() +
+  facet_grid(vars(type_of_structure)) ->
+  Clean_Building_Construction_Annually_Unadjusted_Constant_Graph_9
+
+
+```
+
+
+### Investment in building construction, annually, unadjusted constant K$ Graph 1, Total value, QC, AB, BC, ON
+
+```{r building Construction investment annually unajusted constant K$ Graph 1, fig.height=6, fig.width=9,  layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Construction_Annually_Unadjusted_Constant_Graph_1, dynamicTicks =  TRUE)
+```
+
+### Investment in building construction, annually, unadjusted constant K$ Graph 2, Total value, MB, NB, NL, NS, PE, SK
+
+```{r building Construction investment annually unajusted constant K$ Graph 2, fig.height=6, fig.width=9,  layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Construction_Annually_Unadjusted_Constant_Graph_2, dynamicTicks =  TRUE)
+```
+
+
+### Investment in building construction, annually, unadjusted constant K$ Graph 3, Total value, NT, NU, YT
+
+```{r building Construction investment annually unajusted constant K$ Graph 3, fig.height=6, fig.width=9,  layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Construction_Annually_Unadjusted_Constant_Graph_3, dynamicTicks =  TRUE)
+```
+
+### Investment in building construction, annually, unadjusted constant K$ Graph 4, Total value, first difference, QC, AB, BC, ON
+
+```{r building Construction investment annually unajusted constant K$ Graph 4, fig.height=6, fig.width=9,  layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Construction_Annually_Unadjusted_Constant_Graph_4, dynamicTicks =  TRUE)
+```
+
+### Investment in building construction, annually, unadjusted constant K$ Graph 5, Total value, first difference, MB, NB, NL, NS, PE, SK
+
+```{r building Construction investment annually unadjusted constant K$ Graph 5, fig.height=6, fig.width=9,  layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Construction_Annually_Unadjusted_Constant_Graph_5, dynamicTicks =  TRUE)
+```
+### Investment in building construction, annually, unadjusted constant K$ Graph 6, Total value, first difference, NT, NU, YT
+```{r building Construction investment annually unajusted constant K$ Graph 6, fig.height=6, fig.width=9,  layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Construction_Annually_Unadjusted_Constant_Graph_6, dynamicTicks =  TRUE)
+```
+
+### Investment in building construction, annually, unadjusted constant K$ Graph 7, Total value, Percent change, QC, AB, BC, ON
+
+```{r building Construction investment annually unajusted constant K$ Graph 7, fig.height=6, fig.width=9,  layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Construction_Annually_Unadjusted_Constant_Graph_7, dynamicTicks =  TRUE)
+```
+
+### Investment in building construction, annually, unadjusted constant K$ Graph 8, Total value, Percent change, MB, NB, NL, NS, PE, SK
+
+```{r building Construction investment annually unajusted constant K$ Graph 8, fig.height=6, fig.width=9,  layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Construction_Annually_Unadjusted_Constant_Graph_8, dynamicTicks =  TRUE)
+```
+
+
+### Investment in building construction, annually, unadjusted constant K$ Graph 9, Total value, Percent change, NT, NU, YT
+```{r building Construction investment annually unajusted constant K$ Graph 9, fig.height=6, fig.width=9,  layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Construction_Annually_Unadjusted_Constant_Graph_9, dynamicTicks =  TRUE)
+```
+
+## building Construction investment, monthly unadjusted current
+
+```{r building Construction investment monthly unajusted current,  echo=FALSE, include=FALSE}
+# building Construction investment, monthly unajusted current
+# table 34-10-0175-01 : Building construction 
+
+
+Building_Construction %>%
+  select(ref_date, geo, type_of_structure, type_of_work, investment_value, value) %>% #selected and keep only variable based on their column name
+  mutate(ref_date = parse_date(ref_date, "%Y-%m")) %>% #turn format from : year-month  to date format
+  filter(ref_date > from_this_year) -> #keep only variable based on their value and use from_this_year (line 55-56) as reference of where to start
+  Transit_Building_Construction_Monthly_Unajusted_Current
+
+Transit_Building_Construction_Monthly_Unajusted_Current %>%
+  mutate(ref_date = format(ref_date, "%Y-%b")) %>%
+  filter(geo %in% provinces) %>% #use line 62-63 to only keep geographic value with either provinces name or Canada to get rid of the metropolitean area
+  filter(type_of_work == "Types of work, total") %>% #only keep the total type of work
+  select(!type_of_work) %>% #get rid of type of work column
+  filter(investment_value %in% c("Unadjusted - current")) %>% #keep only unajusted constant value
+  select(!investment_value) %>% #get rid of investment_value column
+  pivot_wider(names_from = ref_date, values_from = value) -> #turn the ref_date into columns of value
+  #clean_names() %>% #avoid transcription mistakes while using %>%
+  #rename_if(is.numeric, funs(str_c(., "_investment"))) -> 
+  Clean_Building_Construction_Monthly_Unajusted_Current
+```
+
+
+## building Construction investment, monthly unadjusted current C$ Table
+```{r building Construction investment monthly unajusted current dynamic table,  echo=FALSE}
+interactive_table(Clean_Building_Construction_Monthly_Unajusted_Current)
+```
+
+### Investment in building construction, monthly, unadjusted current C$ Graph code
+
+```{r building Construction investment Monthly unajusted current C$ Graph, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+
+
+#graph 1 : QC, AB, BC, ON
+Transit_Building_Construction_Monthly_Unajusted_Current %>%
+  filter(geo %in% c("Quebec", "Ontario", "Alberta", "British Columbia")) %>%
+  filter(type_of_structure %in% c("Total residential", "Total non-residential")) %>%
+  filter(type_of_work %in% c("Types of work, total")) %>%
+  filter(investment_value %in% c("Unadjusted - current")) %>%
+  ggplot() +
+  ggtitle("Investment in building construction, monthly, unadjusted current C$ \n QC, AB, BC, ON") +
+  aes(x = ref_date, y = value, colour = geo) +
+  xlab("Year and month") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() + 
+  facet_grid(vars(type_of_structure)) ->
+  Clean_Building_Construction_Monthly_Unadjusted_Current_Graph_1
+
+#graph 2 : MB, NB, NL, NS, PE, SK
+Transit_Building_Construction_Monthly_Unajusted_Current %>%
+  filter(geo %in% c("Newfoundland and Labrador", "Prince Edward Island", "Nova Scotia", "New Brunswick", "Manitoba", "Saskatchewan")) %>%
+  filter(type_of_structure %in% c("Total residential", "Total non-residential")) %>%
+  filter(type_of_work %in% c("Types of work, total")) %>%
+  filter(investment_value %in% c("Unadjusted - current")) %>%
+  ggplot() +
+  ggtitle("Investment in building construction, monthly, unadjusted current C$ \n MB, NB, NL, NS, PE, SK") +
+  aes(x = ref_date, y = value, colour = geo) +
+  xlab("Year and month") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() + 
+  facet_grid(vars(type_of_structure)) ->
+  Clean_Building_Construction_Monthly_Unadjusted_Current_Graph_2
+
+#graph 3 : NT, NU, YT
+Transit_Building_Construction_Monthly_Unajusted_Current %>%
+  filter(geo %in% c("Yukon", "Northwest Territories", "Nunavut")) %>%
+  filter(type_of_structure %in% c("Total residential", "Total non-residential")) %>%
+  filter(type_of_work %in% c("Types of work, total")) %>%
+  filter(investment_value %in% c("Unadjusted - current")) %>%
+  ggplot() +
+  ggtitle("Investment in building construction, monthly, unadjusted current C$ \n NT, NU, YT") +
+  aes(x = ref_date, y = value, colour = geo) +
+  xlab("Year and month") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() + 
+  facet_grid(vars(type_of_structure)) ->
+  Clean_Building_Construction_Monthly_Unadjusted_Current_Graph_3
+```
+
+### Investment in building construction, monthly, unadjusted current C$ Graph 1, total residential, Type of work, QC, AB, BC, ON
+```{r building Construction investment Monthly unajusted current C$ Graph 1, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Construction_Monthly_Unadjusted_Current_Graph_1, dynamicTicks =  TRUE)
+```
+
+### Investment in building construction, monthly, unadjusted current C$ Graph 2, total residential, Type of work, MB, NB, NL, NS, PE, SK
+```{r building Construction investment Monthly unajusted current C$ Graph 2, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Construction_Monthly_Unadjusted_Current_Graph_2, dynamicTicks =  TRUE)
+```
+
+### Investment in building construction, monthly, unadjusted current C$ Graph 3, total residential, Type of work, NT, NU, YT
+```{r building Construction investment Monthly unajusted current C$ Graph 3, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Construction_Monthly_Unadjusted_Current_Graph_3, dynamicTicks =  TRUE)
+```
+
+
+## Building construction investment, annually unadjusted current
+
+```{r building Construction investment annually unajusted current,  echo=FALSE, include=FALSE}
+# building Construction investment, annually unajusted current
+# table 34-10-0175-01 : Building construction 
+
+Building_Construction %>%
+  select(ref_date, geo, type_of_structure, type_of_work, investment_value, value) %>% #selected and keep only variable based on their column name
+  mutate(ref_date = parse_date(ref_date, "%Y-%m")) %>% #turn format from : year-month  to date format
+  filter(ref_date > from_this_year) %>% #keep only variable based on their value and use from_this_year (line 55-56) as reference of where to start
+  filter(geo %in% provinces) %>% #use line 62-63 to only keep geographic value with either provinces name or Canada to get rid of the metropolitean area
+  filter(type_of_work == "Types of work, total") %>% #only keep the total type of work
+  select(!type_of_work) %>% #get rid of type of work column
+  filter(investment_value %in% c("Unadjusted - current")) %>% #keep only unajusted constant value
+  select(!investment_value) %>% #get rid of investment_value column
+  rename_if(is.numeric, funs(str_c(., "_investment_unadjusted_current"))) -> Clean_Building_Construction_Annually_Unajusted_Current
+
+data_Construction_investment_tsbl_Unajusted_Current <- as_tsibble(Clean_Building_Construction_Annually_Unajusted_Current, key = c(geo, type_of_structure))
+data_Construction_investment_tsbl_Unajusted_Current %>%
+  group_by_key() %>%
+  index_by(year_month = ~ year(.)) %>%
+  summarise(
+    'value' = sum(`value_investment_unadjusted_current`, na.rm = TRUE)
+  ) -> Clean_Building_Construction_Annually_Unajusted_Current
+
+Clean_Building_Construction_Annually_Unajusted_Current %>%
+   mutate(across(where(is.character), as.factor)) %>%
+  arrange(type_of_structure, geo, year_month) %>%
+  group_by(type_of_structure, geo) %>%
+  mutate(across(where(is.numeric), fd_pc, .names = "{.col}_{.fn}")) %>%
+   mutate(across(where(is.numeric), round, 3)) %>%
+    select(order(colnames(.))) %>%
+  relocate(where(is.numeric), .after = where((is.factor))) %>%
+  relocate(`year_month`)  %>%
+  select(!year_month_fd) %>% #get rid of useless columns
+  select(!year_month_pc) -> #get rid of useless columns
+  Transit_Building_Construction_Annually_Unajusted_Current
+
+
+as_tibble(Transit_Building_Construction_Annually_Unajusted_Current) %>%
+  pivot_wider(names_from = year_month, values_from = c(`value`, `value_fd`, `value_pc`)) %>% #turn the ref_date into columns of value
+  clean_names() %>%
+  select(!str_c("value_fd_", Incomplete_Year1)) %>% #get rid of useless columns
+  select(!str_c("value_fd_", Incomplete_Year2)) %>% #get rid of useless columns
+  select(!str_c("value_pc_", Incomplete_Year1)) %>% #get rid of useless columns
+  select(!str_c("value_pc_", Incomplete_Year2)) -> #get rid of useless columns
+Clean_Building_Construction_Annually_Unajusted_Current
+
+```
+
+## Building construction investment, annually unadjusted current C$ Table
+fd = first difference; pc = percent change
+```{r building Construction investment annually unajusted current dynamic table,  echo=FALSE}
+interactive_table(Clean_Building_Construction_Annually_Unajusted_Current)
+```
+
+### Investment in building construction, annually, unadjusted current C$ Graph code
+
+```{r building Construction investment annually unajusted current C$ Graph, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+
+#graph 1 with constant value QC, AB, BC, ON
+Transit_Building_Construction_Annually_Unajusted_Current %>%
+  filter(geo %in% c("Quebec", "Ontario", "Alberta", "British Columbia")) %>%
+  filter(!year_month %in% c(Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total residential", "Total non-residential")) %>%
+  ggplot() +
+  ggtitle("Investment in building construction, annually, unadjusted current C$ \n QC, AB, BC, ON") +
+  aes(x = year_month, y = value, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() +
+  facet_grid(vars(type_of_structure)) ->
+  Clean_Building_Construction_Annually_Unadjusted_Current_Graph_1
+
+#graph 2 with constant value : MB, NB, NL, NS, PE, SK
+Transit_Building_Construction_Annually_Unajusted_Current %>%
+  filter(geo %in% c("Newfoundland and Labrador", "Prince Edward Island", "Nova Scotia", "New Brunswick", "Manitoba", "Saskatchewan")) %>%
+  filter(!year_month %in% c(Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total residential", "Total non-residential")) %>%
+  ggplot() +
+  ggtitle("Investment in building construction, annually, unadjusted current C$ \n MB, NB, NL, NS, PE, SK") +
+  aes(x = year_month, y = value, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() +
+  facet_grid(vars(type_of_structure)) ->
+  Clean_Building_Construction_Annually_Unadjusted_Current_Graph_2
+
+
+#graph 3 with constant value : NT, NU, YT
+Transit_Building_Construction_Annually_Unajusted_Current %>%
+  filter(geo %in% c("Yukon", "Northwest Territories", "Nunavut")) %>%
+  filter(!year_month %in% c(Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total residential", "Total non-residential")) %>%
+  ggplot() +
+  ggtitle("Investment in building construction, annually, unadjusted current C$ \n NT, NU, YT") +
+  aes(x = year_month, y = value, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() +
+  facet_grid(vars(type_of_structure)) ->
+  Clean_Building_Construction_Annually_Unadjusted_Current_Graph_3
+
+#graph 4 with constant value QC, AB, BC, ON
+Transit_Building_Construction_Annually_Unajusted_Current %>%
+  filter(geo %in% c("Quebec", "Ontario","Alberta", "British Columbia")) %>%
+  filter(!year_month %in% c(Incomplete_Year1, Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total residential", "Total non-residential")) %>%
+  ggplot() +
+  ggtitle("Investment in building construction, annually, first difference unadjusted current C$ \n QC, AB, BC, ON") +
+  aes(x = year_month, y = value_fd, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() +
+  facet_grid(vars(type_of_structure)) ->
+  Clean_Building_Construction_Annually_Unadjusted_Current_Graph_4
+
+#graph 5 with constant value : MB, NB, NL, NS, PE, SK
+Transit_Building_Construction_Annually_Unajusted_Current %>%
+  filter(geo %in% c("Newfoundland and Labrador", "Prince Edward Island", "Nova Scotia", "New Brunswick", "Manitoba", "Saskatchewan")) %>%
+  filter(!year_month %in% c(Incomplete_Year1, Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total residential", "Total non-residential")) %>%
+  ggplot() +
+  ggtitle("Investment in building construction, annually, first difference, unadjusted current C$ \n MB, NB, NL, NS, PE, SK") +
+  aes(x = year_month, y = value_fd, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() +
+  facet_grid(vars(type_of_structure)) ->
+  Clean_Building_Construction_Annually_Unadjusted_Current_Graph_5
+
+#graph 6 with constant value : NT, NU, YT
+Transit_Building_Construction_Annually_Unajusted_Current %>%
+  filter(geo %in% c("Yukon", "Northwest Territories", "Nunavut")) %>%
+  filter(!year_month %in% c(Incomplete_Year1, Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total residential", "Total non-residential")) %>%
+  ggplot() +
+  ggtitle("Investment in building construction, annually, first difference, unadjusted current C$ \n NT, NU, YT") +
+  aes(x = year_month, y = value_fd, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() +
+  facet_grid(vars(type_of_structure)) ->
+  Clean_Building_Construction_Annually_Unadjusted_Current_Graph_6
+
+#graph 7 with constant value : QC, AB, BC, ON
+Transit_Building_Construction_Annually_Unajusted_Current %>%
+  filter(geo %in% c("Quebec", "Ontario", "Alberta", "British Columbia")) %>%
+  filter(!year_month %in% c(Incomplete_Year1, Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total residential", "Total non-residential")) %>%
+  ggplot() +
+  ggtitle("Investment in building construction, annually, percent change, unadjusted current C$ \n QC, AB, BC, ON") +
+  aes(x = year_month, y = value_pc, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() +
+  facet_grid(vars(type_of_structure)) ->
+  Clean_Building_Construction_Annually_Unadjusted_Current_Graph_7
+
+#graph 8 with constant value : MB, NB, NL, NS, PE, SK
+Transit_Building_Construction_Annually_Unajusted_Current %>%
+  filter(geo %in% c("Newfoundland and Labrador", "Prince Edward Island", "Nova Scotia", "New Brunswick", "Manitoba", "Saskatchewan")) %>%
+  filter(!year_month %in% c(Incomplete_Year1, Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total residential", "Total non-residential")) %>%
+  ggplot() +
+  ggtitle("Investment in building construction, annually, percent change, unadjusted current C$ \n MB, NB, NL, NS, PE, SK") +
+  aes(x = year_month, y = value_pc, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() +
+  facet_grid(vars(type_of_structure)) ->
+  Clean_Building_Construction_Annually_Unadjusted_Current_Graph_8
+
+#graph 9 with constant value : NT, NU, YT
+Transit_Building_Construction_Annually_Unajusted_Current %>%
+  filter(geo %in% c("Yukon", "Northwest Territories", "Nunavut")) %>%
+  filter(!year_month %in% c(Incomplete_Year1, Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total residential", "Total non-residential")) %>%
+  ggplot() +
+  ggtitle("Investment in building construction, annually, percent change, unadjusted current C$ \n NT, NU, YT") +
+  aes(x = year_month, y = value_pc, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() +
+  facet_grid(vars(type_of_structure)) ->
+  Clean_Building_Construction_Annually_Unadjusted_Current_Graph_9
+```
+
+
+### Investment in building construction, annually, unadjusted current C$ Graph 1, Total value, QC, AB, BC, ON
+
+```{r building Construction investment annually unajusted current C$ Graph 1, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Construction_Annually_Unadjusted_Current_Graph_1, dynamicTicks =  TRUE)
+```
+
+### Investment in building construction, annually, unadjusted current C$ Graph 2, Total value, MB, NB, NL, NS, PE, SK
+
+```{r building Construction investment annually unajusted current C$ Graph 2, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Construction_Annually_Unadjusted_Current_Graph_2, dynamicTicks =  TRUE)
+```
+
+### Investment in building construction, annually, unadjusted current C$ Graph 3, Total value, NT, NU, YT
+
+```{r building Construction investment annually unajusted current C$ Graph 3, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Construction_Annually_Unadjusted_Current_Graph_3, dynamicTicks =  TRUE)
+```
+
+### Investment in building construction, annually, unadjusted current C$ Graph 4, Total value, first difference QC, AB, BC, ON
+
+```{r building Construction investment annually unajusted current C$ Graph 4, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Construction_Annually_Unadjusted_Current_Graph_4, dynamicTicks =  TRUE)
+```
+
+
+### Investment in building construction, annually, unadjusted current C$ Graph 5, Total value, first difference MB, NB, NL, NS, PE, SK
+
+```{r building Construction investment annually unadjusted current C$ Graph 5, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Construction_Annually_Unadjusted_Current_Graph_5, dynamicTicks =  TRUE)
+```
+
+### Investment in building construction, annually, unadjusted current C$ Graph 6, Total value, first difference NT, NU, YT
+
+```{r building Construction investment annually unajusted current C$ Graph 6, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Construction_Annually_Unadjusted_Current_Graph_6, dynamicTicks =  TRUE)
+```
+
+### Investment in building construction, annually, unadjusted current C$ Graph 7, Total value, percent change, QC, AB, BC, ON
+
+```{r building Construction investment annually unajusted current C$ Graph 7, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Construction_Annually_Unadjusted_Current_Graph_7, dynamicTicks =  TRUE)
+```
+
+### Investment in building construction, annually, unadjusted current C$ Graph 8, Total value, percent change, MB, NB, NL, NS, PE, SK
+
+```{r building Construction investment annually unajusted current C$ Graph 8, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Construction_Annually_Unadjusted_Current_Graph_8, dynamicTicks =  TRUE)
+```
+
+
+### Investment in building construction, annually, unadjusted current C$ Graph 9, Total value, percent change, NT, NU, YT
+
+```{r building Construction investment annually unajusted current C$ Graph 9, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Construction_Annually_Unadjusted_Current_Graph_9, dynamicTicks =  TRUE)
+```
+
+# Building permits database
+
+```{r Building permits database, echo=FALSE, include=FALSE}
+# building permits,
+# table 34-10-0066-01 : Building permits 
+# the file is too heavy (260 Mo) to be load on standard computer. If you are working on DAAAS, you can use the following equation to get the data :
+# Building_Permits <- cansim::get_cansim_ndm(building_permits_table_number)
+
+# Otherwise, here's the following methode: these vectors are only for unajusted constant and unajusted current
+
+
+#This allow to take the file for building permits and get a list of all the useful vector to then cbind tham as metadata for the data from cansim.
+Building_Permits_Cbind <- read.csv(file="ConstructionPermitsCbind.csv", header = TRUE) # if the code doesn't work, you can always use : read.csv(file.choose(), header = TRUE) Choose ConstructionPermitsCbind.csv
+head(Building_Permits_Cbind)
+Building_Permits_Cbind <-as.data.frame(Building_Permits_Cbind)
+Building_Permits_Cbind <- janitor::clean_names(Building_Permits_Cbind)
+Building_Permits_Cbind %>%
+  select(geo, type_of_structure, type_of_work, variables, seasonal_adjustment, uom, scalar_factor, vector, coordinate) %>%
+  distinct() -> #get rid of dupplicates
+    Building_Permits_Cbind
+
+
+
+#The data from cansim is limited to 300 vectors. Here, we will attempt to split our list of 300 vectors.
+#Also, the data is capped at 6000 data points so to access for historical data, we will use 200 vectors at a time. With 100 in order to have data up to 2017.
+#BPC = Building Permits Cbind    and BPV = Building Permits Vectors
+#note from Hugo, it would be more efficient in loadtime to wrap this section of the code in a single looping function. If I have time later, I need to work on this.
+
+#first we create the list of vectors to be used
+BPC1 <- Building_Permits_Cbind$vector[1:100]
+BPC2 <- Building_Permits_Cbind$vector[101:200]
+BPC3 <- Building_Permits_Cbind$vector[201:300]
+BPC4 <- Building_Permits_Cbind$vector[301:400]
+BPC5 <- Building_Permits_Cbind$vector[401:500]
+BPC6 <- Building_Permits_Cbind$vector[501:600]
+BPC7 <- Building_Permits_Cbind$vector[601:700]
+BPC8 <- Building_Permits_Cbind$vector[701:800]
+BPC9 <- Building_Permits_Cbind$vector[801:900]
+BPC10 <- Building_Permits_Cbind$vector[901:1000]
+BPC11 <- Building_Permits_Cbind$vector[1001:1100]
+BPC12 <- Building_Permits_Cbind$vector[1101:1200]
+BPC13 <- Building_Permits_Cbind$vector[1201:1300]
+BPC14 <- Building_Permits_Cbind$vector[1301:1400]
+BPC15 <- Building_Permits_Cbind$vector[1401:1500]
+BPC16 <- Building_Permits_Cbind$vector[1501:1600]
+BPC17 <- Building_Permits_Cbind$vector[1601:1700]
+BPC18 <- Building_Permits_Cbind$vector[1701:1800]
+BPC19 <- Building_Permits_Cbind$vector[1801:1900]
+BPC20 <- Building_Permits_Cbind$vector[1901:2000]
+BPC21 <- Building_Permits_Cbind$vector[2001:2100]
+BPC22 <- Building_Permits_Cbind$vector[2101:2184] 
+
+#then we seek the cansim vector based on the lists
+BPV1 <- cansim::get_cansim_vector_for_latest_periods(BPC1, periods = 60)
+BPV2 <- cansim::get_cansim_vector_for_latest_periods(BPC2, periods = 60)
+BPV3 <- cansim::get_cansim_vector_for_latest_periods(BPC3, periods = 60)
+BPV4 <- cansim::get_cansim_vector_for_latest_periods(BPC4, periods = 60)
+BPV5 <- cansim::get_cansim_vector_for_latest_periods(BPC5, periods = 60)
+BPV6 <- cansim::get_cansim_vector_for_latest_periods(BPC6, periods = 60)
+BPV7 <- cansim::get_cansim_vector_for_latest_periods(BPC7, periods = 60)
+BPV8 <- cansim::get_cansim_vector_for_latest_periods(BPC8, periods = 60)
+BPV9 <- cansim::get_cansim_vector_for_latest_periods(BPC9, periods = 60)
+BPV10 <- cansim::get_cansim_vector_for_latest_periods(BPC10, periods = 60)
+BPV11 <- cansim::get_cansim_vector_for_latest_periods(BPC11, periods = 60)
+BPV12 <- cansim::get_cansim_vector_for_latest_periods(BPC12, periods = 60)
+BPV13 <- cansim::get_cansim_vector_for_latest_periods(BPC13, periods = 60)
+BPV14 <- cansim::get_cansim_vector_for_latest_periods(BPC14, periods = 60)
+BPV15 <- cansim::get_cansim_vector_for_latest_periods(BPC15, periods = 60)
+BPV16 <- cansim::get_cansim_vector_for_latest_periods(BPC16, periods = 60)
+BPV17 <- cansim::get_cansim_vector_for_latest_periods(BPC17, periods = 60)
+BPV18 <- cansim::get_cansim_vector_for_latest_periods(BPC18, periods = 60)
+BPV19 <- cansim::get_cansim_vector_for_latest_periods(BPC19, periods = 60)
+BPV20 <- cansim::get_cansim_vector_for_latest_periods(BPC20, periods = 60)
+BPV21 <- cansim::get_cansim_vector_for_latest_periods(BPC21, periods = 60)
+BPV22 <- cansim::get_cansim_vector_for_latest_periods(BPC22, periods = 60)
+
+
+#row bind the vectors into a data table
+BPVX <- rbind(BPV1,BPV2, BPV3, BPV4, BPV5, BPV6, BPV7, BPV8, BPV9, BPV10, BPV11, BPV12, BPV13, BPV14, BPV15, BPV16, BPV17, BPV18, BPV19, BPV20, BPV21, BPV22)
+
+BPVX <- janitor::clean_names(BPVX) #remove capital letters in column names
+
+#merge the metadata to the proper vectors to obtain the datatable to be used.
+Building_Permits_merging <- merge(Building_Permits_Cbind, BPVX, by = "vector")
+Building_Permits_merging[order(as.Date(Building_Permits_merging$ref_date, format="%y-%m-%d")),]
+Building_Permits <- janitor::clean_names(Building_Permits_merging) #remove capital letters
+
+```
+
+## Value and number of permits, Unadjusted current
+## Building permits, residential values and number of units, by type of dwelling, annual (x1,000)
+
+```{r Value and number of permits Residential Unajusted current,  echo=FALSE, include=FALSE}
+
+# Building permits, residential values and number of units, by type of dwelling, annual
+# Value of permits, Unajusted current
+
+# unique(Building_Permits$type_of_structure) # used to find easily what variable is available
+# unique(Building_Permits$variables)
+# unique(Building_Permits$seasonal_adjustment)
+
+#Building_Permits <- Building_Permits %>% mutate(across(value(funs(replace_na(.,0)))
+
+Building_Permits %>%
+  select(vector, ref_date, geo, type_of_structure, type_of_work, variables, seasonal_adjustment, value) %>% #selected and keep only variable based on their column name
+  mutate(ref_date = parse_date(ref_date, "%Y-%m-%d")) %>% #turn format from : year-month-day  to date format
+  filter(ref_date > from_this_year) %>% #keep only variable based on their value and use from_this_year (line 55-56) as reference of where to start
+  filter(geo %in% provinces) %>% #use line 62-63 to only keep geographic value with either provinces name or Canada to get rid of the metropolitean area
+  filter(type_of_work %in% "Types of work, total") %>% #only keep the total type of work
+  filter(type_of_structure %in% c("Total residential", "Single dwelling building total", "Major single dwelling  projects", "Minor single dwelling projects", "Single total", "Mobile home", "Cottage", "Multiple dwelling building total", "Major multiple dwelling projects", "Minor multiple dwelling projects", "Double total", "Row total", "Apartment total")) %>%
+  filter(seasonal_adjustment %in% "Unadjusted, current") %>%
+  select(!type_of_work) %>% #get rid of type of work column
+  select(!seasonal_adjustment) %>% #get rid of seasonal_adjustment
+  rename_if(is.numeric, funs(str_c(., "_of_permits_unadjusted_current"))) ->
+  Clean_Building_Permits_Residential_Annually_Unajusted_Current
+
+data_permits_value_residential_tsbl_Unajusted_Current <- as_tsibble(Clean_Building_Permits_Residential_Annually_Unajusted_Current, key = c(geo, type_of_structure, variables))
+data_permits_value_residential_tsbl_Unajusted_Current %>%
+  group_by_key() %>%
+  index_by(year_month = ~ year(.)) %>%
+  summarise(
+    'permits' = sum(`value_of_permits_unadjusted_current`, na.rm = TRUE)
+  ) -> Clean_Building_Permits_Residential_Annually_Unajusted_Current
+
+Clean_Building_Permits_Residential_Annually_Unajusted_Current %>%
+   mutate(across(where(is.character), as.factor)) %>%
+  arrange(type_of_structure, geo, variables, year_month) %>%
+  group_by(type_of_structure, geo, variables) %>%
+  mutate(across(where(is.numeric), fd_pc, .names = "{.col}_{.fn}")) %>%
+   mutate(across(where(is.numeric), round, 3)) %>%
+    select(order(colnames(.))) %>%
+  relocate(where(is.numeric), .after = where((is.factor))) %>%
+  relocate(`year_month`)  %>%
+  select(!year_month_fd) %>% #get rid of useless columns
+  select(!year_month_pc) -> #get rid of useless columns
+  Transit_Building_Permits_Residential_Annually_Unajusted_Current #used in dynamic graph for easy formatting
+
+as_tibble(Transit_Building_Permits_Residential_Annually_Unajusted_Current) %>%
+  pivot_wider(names_from = year_month, values_from = c(`permits`, `permits_fd`, `permits_pc`)) %>% #turn the ref_date into columns of value
+  clean_names() %>%
+  select(!str_c("permits_fd_", Incomplete_Year1)) %>% #get rid of useless columns
+  select(!str_c("permits_fd_", Incomplete_Year2)) %>% #get rid of useless columns
+  select(!str_c("permits_pc_", Incomplete_Year1)) %>% #get rid of useless columns
+  select(!str_c("permits_pc_", Incomplete_Year2)) -> #get rid of useless columns
+Clean_Building_Permits_Residential_Annually_Unajusted_Current
+```
+
+
+## Building permits, residential values and number of units, by type of dwelling, annual, unadjusted current (x1,000) Table
+fd = first difference; pc = percent change
+```{r Value and number of permits Residential Unajusted current dynamic table,  echo=FALSE}
+interactive_table(Clean_Building_Permits_Residential_Annually_Unajusted_Current)
+
+```
+
+### Building permits, residential values and number of units, by type of dwelling, annual, unadjusted current (x1,000) Graph code
+
+```{r Building permits residential values and number of units by type of dwelling annual unajusted current x1000 Graph code, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+  
+#graph 1 with current value : QC, AB, BC, ON
+Transit_Building_Permits_Residential_Annually_Unajusted_Current %>%
+  filter(geo %in% c("Quebec", "Ontario", "Alberta", "British Columbia")) %>%
+  filter(!year_month %in% c(Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total residential")) %>%
+  filter(variables %in% c("Value of permits", "Number of permits")) %>%
+  ggplot() +
+  ggtitle("Value of residential building permits, annually, (x1,000) \n unadjusted current C$ QC, AB, BC, ON") +
+  aes(x = year_month, y = permits, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() +
+  facet_grid(vars(variables)) ->
+  Clean_Building_Permits_Residential_Annually_Unadjusted_Current_Graph_1
+
+#graph 2 with current value : MB, NB, NL, NS, PE, SK
+Transit_Building_Permits_Residential_Annually_Unajusted_Current %>%
+  filter(geo %in% c("Newfoundland and Labrador", "Prince Edward Island", "Nova Scotia", "New Brunswick", "Manitoba", "Saskatchewan")) %>%
+  filter(!year_month %in% c(Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total residential")) %>%
+  filter(variables %in% c("Value of permits", "Number of permits")) %>%
+  ggplot() +
+  ggtitle("Value of residential building permits, annually, (x1,000) \n unadjusted current C$ MB, NB, NL, NS, PE, SK") +
+  aes(x = year_month, y = permits, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() +
+  facet_grid(vars(variables)) ->
+  Clean_Building_Permits_Residential_Annually_Unadjusted_Current_Graph_2
+
+
+#graph 3 with current value : NT, NU, YT
+Transit_Building_Permits_Residential_Annually_Unajusted_Current %>%
+  filter(geo %in% c("Yukon", "Northwest Territories", "Nunavut")) %>%
+  filter(!year_month %in% c(Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total residential")) %>%
+  filter(variables %in% c("Value of permits", "Number of permits")) %>%
+  ggplot() +
+  ggtitle("Value of residential building permits, annually, (x1,000) \n unadjusted current C$ NT, NU, YT") +
+  aes(x = year_month, y = permits, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() +
+  facet_grid(vars(variables)) ->
+  Clean_Building_Permits_Residential_Annually_Unadjusted_Current_Graph_3
+
+#graph 4 with current value : QC, AB, BC, ON
+Transit_Building_Permits_Residential_Annually_Unajusted_Current %>%
+  filter(geo %in% c("Quebec", "Ontario", "Alberta", "British Columbia")) %>%
+  filter(!year_month %in% c(Incomplete_Year1, Incomplete_Year2)) %>%
+  filter(type_of_structure %in% c("Total residential")) %>%
+  filter(variables %in% c("Value of permits", "Number of permits")) %>%
+  ggplot() +
+  ggtitle("Value of residential building permits, annually, First difference (x1,000) \n unadjusted current C,QC, AB, BC, ON") +
+  aes(x = year_month, y = permits_fd, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() +
+  facet_grid(vars(variables)) ->
+  Clean_Building_Permits_Residential_Annually_Unadjusted_Current_Graph_4
+
+#graph 5 with current value : MB, NB, NL, NS, PE, SK
+Transit_Building_Permits_Residential_Annually_Unajusted_Current %>%
+  filter(geo %in% c("Newfoundland and Labrador", "Prince Edward Island", "Nova Scotia", "New Brunswick", "Manitoba", "Saskatchewan")) %>%
+  filter(!year_month %in% c(Incomplete_Year1, Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total residential")) %>%
+  filter(variables %in% c("Value of permits", "Number of permits")) %>%
+  ggplot() +
+  ggtitle("Value of residential building permits, annually, First difference (x1,000) \n unadjusted current C$, MB, NB, NL, NS, PE, SK") +
+  aes(x = year_month, y = permits_fd, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() +
+  facet_grid(vars(variables)) ->
+  Clean_Building_Permits_Residential_Annually_Unadjusted_Current_Graph_5
+
+#graph 6 with current value : NT, NU, YT
+Transit_Building_Permits_Residential_Annually_Unajusted_Current %>%
+  filter(geo %in% c("Yukon", "Northwest Territories", "Nunavut")) %>%
+  filter(!year_month %in% c(Incomplete_Year1, Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total residential")) %>%
+  filter(variables %in% c("Value of permits", "Number of permits")) %>%
+  ggplot() +
+  ggtitle("Value of residential building permits, annually, First difference (x1,000) \n unadjusted current C$, NT, NU, YT") +
+  aes(x = year_month, y = permits_fd, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() +
+  facet_grid(vars(variables)) ->
+  Clean_Building_Permits_Residential_Annually_Unadjusted_Current_Graph_6
+
+#graph 7 with current value : QC, AB, BC, ON
+Transit_Building_Permits_Residential_Annually_Unajusted_Current %>%
+  filter(geo %in% c("Quebec", "Ontario", "Alberta", "British Columbia")) %>%
+  filter(!year_month %in% c(Incomplete_Year1, Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total residential")) %>%
+  filter(variables %in% c("Value of permits", "Number of permits")) %>%
+  ggplot() +
+  ggtitle("Value of residential building permits, annually, percent change \n unadjusted current C$, QC, AB, BC, ON") +
+  aes(x = year_month, y = permits_pc, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() +
+  facet_grid(vars(variables)) ->
+  Clean_Building_Permits_Residential_Annually_Unadjusted_Current_Graph_7
+
+#graph 8 with current value : MB, NB, NL, NS, PE, SK
+Transit_Building_Permits_Residential_Annually_Unajusted_Current %>%
+  filter(geo %in% c("Newfoundland and Labrador", "Prince Edward Island", "Nova Scotia", "New Brunswick", "Manitoba", "Saskatchewan")) %>%
+  filter(!year_month %in% c(Incomplete_Year1, Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total residential")) %>%
+  filter(variables %in% c("Value of permits", "Number of permits")) %>%
+  ggplot() +
+  ggtitle("Value of residential building permits, annually, percent change \n unadjusted current C$, MB, NB, NL, NS, PE, SK") +
+  aes(x = year_month, y = permits_pc, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() +
+  facet_grid(vars(variables)) ->
+  Clean_Building_Permits_Residential_Annually_Unadjusted_Current_Graph_8
+
+#graph 9 with current value : NT, NU, YT
+Transit_Building_Permits_Residential_Annually_Unajusted_Current %>%
+  filter(geo %in% c("Yukon", "Northwest Territories", "Nunavut")) %>%
+  filter(!year_month %in% c(Incomplete_Year1, Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total residential")) %>%
+  filter(variables %in% c("Value of permits", "Number of permits")) %>%
+  ggplot() +
+  ggtitle("Value of residential building permits, annually, percent change \n unadjusted current C$, NT, NU, YT") +
+  aes(x = year_month, y = permits_pc, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() +
+  facet_grid(vars(variables)) ->
+  Clean_Building_Permits_Residential_Annually_Unadjusted_Current_Graph_9
+```
+
+### Building permits, residential values and number of units, by type of dwelling, annual, unadjusted current (x1,000) Graph 1, QC, AB, BC, ON
+
+```{r Building permits residential values and number of units by type of dwelling annual unajusted current x1000 Graph 1, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Permits_Residential_Annually_Unadjusted_Current_Graph_1, dynamicTicks =  TRUE)
+```
+### Building permits, residential values and number of units, by type of dwelling, annual, unadjusted current (x1,000) Graph 2, MB, NB, NL, NS, PE, SK
+
+```{r Building permits residential values and number of units by type of dwelling annual unajusted current x1000 Graph 2, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Permits_Residential_Annually_Unadjusted_Current_Graph_2, dynamicTicks =  TRUE)
+```
+
+### Building permits, residential values and number of units, by type of dwelling, annual, unadjusted current (x1,000) Graph 3, NT, NU, YT
+
+```{r Building permits residential values and number of units by type of dwelling annual unajusted current x1000 Graph 3, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Permits_Residential_Annually_Unadjusted_Current_Graph_3, dynamicTicks =  TRUE)
+```
+
+### Building permits, residential values and number of units, by type of dwelling, annual, unadjusted current (x1,000), first difference, Graph 4, QC, AB, BC, ON
+
+```{r Building permits residential values and number of units by type of dwelling annual unajusted current x1000 Graph 4, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Permits_Residential_Annually_Unadjusted_Current_Graph_4, dynamicTicks =  TRUE)
+```
+
+## Building permits, residential values and number of units, by type of dwelling, annual unadjusted current (x1,000), first difference, Graph 5, MB, NB, NL, NS, PE, SK
+
+```{r Building permits residential values and number of units by type of dwelling annual unajusted current x1000 Graph 5, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Permits_Residential_Annually_Unadjusted_Current_Graph_5, dynamicTicks =  TRUE)
+```
+
+### Building permits, residential values and number of units, by type of dwelling, annual, unadjusted current (x1,000), first difference, Graph 6, NT, NU, YT
+
+```{r Building permits residential values and number of units by type of dwelling annual unajusted current x1000 Graph 6, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Permits_Residential_Annually_Unadjusted_Current_Graph_6, dynamicTicks =  TRUE)
+```
+
+### Building permits, residential values and number of units, by type of dwelling, annual, unadjusted current (x1,000), percent change, Graph 7, QC, AB, BC, ON
+
+```{r Building permits residential values and number of units by type of dwelling annual unajusted current x1000 Graph 7, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Permits_Residential_Annually_Unadjusted_Current_Graph_7, dynamicTicks =  TRUE)
+```
+
+### Building permits, residential values and number of units, by type of dwelling, annual unadjusted current (x1,000), percent change, Graph 8, MB, NB, NL, NS, PE, SK
+
+```{r Building permits residential values and number of units by type of dwelling annual unajusted current x1000 Graph 8, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Permits_Residential_Annually_Unadjusted_Current_Graph_8, dynamicTicks =  TRUE)
+```
+
+### Building permits, residential values and number of units, by type of dwelling, annual, unadjusted current (x1,000), percent change, Graph 9, NT, NU, YT
+
+```{r Building permits residential values and number of units by type of dwelling annual unajusted current x1000 Graph 9, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Permits_Residential_Annually_Unadjusted_Current_Graph_9, dynamicTicks =  TRUE)
+```
+
+
+## Value and number of permits, Unadjusted current
+## Building permits, Non-residential values and number of units, by type of structure, annual (x1,000)
+
+```{r Value and number of permits NonResidential Unajusted current,  echo=FALSE, include=FALSE}
+
+# Building permits, Non-residential values and number of units, by type of Structure, annual
+# Value of permits, Unajusted current
+
+# unique(Building_Permits$type_of_structure) # used to find easily what variable is available
+# unique(Building_Permits$variables)
+# unique(Building_Permits$seasonal_adjustment)
+
+
+Building_Permits %>%
+  select(vector, ref_date, geo, type_of_structure, type_of_work, variables, seasonal_adjustment, value) %>% #selected and keep only variable based on their column name
+  mutate_all(funs(replace_na(.,0))) %>%
+  mutate(ref_date = parse_date(ref_date, "%Y-%m-%d")) %>% #turn format from : year-month-day  to date format
+  filter(ref_date > from_this_year) %>% #keep only variable based on their value and use from_this_year (line 55-56) as reference of where to start
+  filter(geo %in% provinces) %>% #use line 62-63 to only keep geographic value with either provinces name or Canada to get rid of the metropolitean area
+  filter(type_of_work %in% "Types of work, total") %>% #only keep the total type of work
+  filter(type_of_structure %in% c("Total non-residential", "Total industrial", "Total major industrial projects", "Total minor industrial projects", "Factories, plants", "Transportation, utilities", "Mining and agriculture", "Total commercial", "Total major commercial projects", "Total minor commercial projects", "Trade and services", "Warehouses", "Service stations", "Office buildings", "Recreation", "Hotels, restaurants", "Laboratories", "Total institutional and governmental", "Total major institutional and governmental projects", "Total minor institutional and governmental projects", "Schools, education", "Medical, hospital", "Welfare, home", "Churches, religion", "Government buildings")) %>%
+  filter(seasonal_adjustment %in% "Unadjusted, current") %>%
+  select(!type_of_work) %>% #get rid of type of work column
+  select(!seasonal_adjustment) %>% #get rid of seasonal_adjustment
+  rename_if(is.numeric, funs(str_c(., "_of_permits_unadjusted_current"))) ->
+  Clean_Building_Permits_NonResidential_Annually_Unajusted_Current
+
+data_permits_value_nonresidential_tsbl_Unajusted_Current <- as_tsibble(Clean_Building_Permits_NonResidential_Annually_Unajusted_Current, key = c(geo, type_of_structure, variables))
+data_permits_value_nonresidential_tsbl_Unajusted_Current %>%
+  group_by_key() %>%
+  index_by(year_month = ~ year(.)) %>%
+  summarise(
+    'permits' = sum(`value_of_permits_unadjusted_current`, na.rm = TRUE)
+  ) -> Clean_Building_Permits_NonResidential_Annually_Unajusted_Current
+
+Clean_Building_Permits_NonResidential_Annually_Unajusted_Current %>%
+   mutate(across(where(is.character), as.factor)) %>%
+  arrange(type_of_structure, geo, variables, year_month) %>%
+  group_by(type_of_structure, geo) %>%
+  mutate(across(where(is.numeric), fd_pc, .names = "{.col}_{.fn}")) %>% #use the fd_pc function to create columns
+   mutate(across(where(is.numeric), round, 3)) %>% #limit to 3 decimals
+    select(order(colnames(.))) %>% # order the columns
+  relocate(where(is.numeric), .after = where((is.factor))) %>%
+  relocate(`year_month`)  %>%
+  select(!year_month_fd) %>% #get rid of useless columns
+  select(!year_month_pc) -> #get rid of useless columns
+  Transit_Building_Permits_NonResidential_Annually_Unajusted_Current
+
+as_tibble(Transit_Building_Permits_NonResidential_Annually_Unajusted_Current) %>%
+  pivot_wider(names_from = year_month, values_from = c(`permits`, `permits_fd`, `permits_pc`)) %>% #turn the ref_date into columns of value
+  clean_names() %>%
+  select(!str_c("permits_fd_", Incomplete_Year1)) %>% #get rid of useless columns
+  select(!str_c("permits_fd_", Incomplete_Year2)) %>% #get rid of useless columns
+  select(!str_c("permits_pc_", Incomplete_Year1)) %>% #get rid of useless columns
+  select(!str_c("permits_pc_", Incomplete_Year2)) -> #get rid of useless columns
+Clean_Building_Permits_NonResidential_Annually_Unajusted_Current
+
+```
+
+## Building permits, Non-residential values and number of units, by type of structure, annual, unadjusted current (x1,000) Table
+fd = first different; pc = percent change
+```{r Value and number of permits NonResidential Unajusted current dynamic table,  echo=FALSE}
+interactive_table(Clean_Building_Permits_NonResidential_Annually_Unajusted_Current)
+```
+
+### Building permits, Non-residential values and number of units, by type of dwelling, annual, unadjusted current (x1,000) Graph code
+
+```{r Building permits NonResidential values and number of units by type of dwelling annual unajusted current x1000 Graph code, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+
+#graph 1 with current value QC, AB, BC, ON
+Transit_Building_Permits_NonResidential_Annually_Unajusted_Current %>%
+  filter(geo %in% c("Quebec", "Ontario", "Alberta", "British Columbia")) %>%
+  filter(!year_month %in% c(Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total non-residential")) %>%
+  filter(variables %in% c("Value of permits", "Number of permits")) %>%
+  ggplot() +
+  ggtitle("Value of non-residential building permits, annually, (x1,000) \n unadjusted current C$ QC, AB, BC, ON") +
+  aes(x = year_month, y = permits, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() +
+  facet_grid(vars(variables)) ->
+  Clean_Building_Permits_NonResidential_Annually_Unadjusted_Current_Graph_1
+
+#graph 2 with current value MB, NB, NL, NS, PE, SK
+Transit_Building_Permits_NonResidential_Annually_Unajusted_Current %>%
+  filter(geo %in% c("Newfoundland and Labrador", "Prince Edward Island", "Nova Scotia", "New Brunswick", "Manitoba", "Saskatchewan")) %>%
+  filter(!year_month %in% c(Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total non-residential")) %>%
+  filter(variables %in% c("Value of permits", "Number of permits")) %>%
+  ggplot() +
+  ggtitle("Value of non-residential building permits, annually, (x1,000) \n unadjusted current C$ MB, NB, NL, NS, PE, SK") +
+  aes(x = year_month, y = permits, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() +
+  facet_grid(vars(variables)) ->
+  Clean_Building_Permits_NonResidential_Annually_Unadjusted_Current_Graph_2
+
+
+#graph 3 with current value NT, NU, YT
+Transit_Building_Permits_NonResidential_Annually_Unajusted_Current %>%
+  filter(geo %in% c("Yukon", "Northwest Territories", "Nunavut")) %>%
+  filter(!year_month %in% c(Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total non-residential")) %>%
+  filter(variables %in% c("Value of permits", "Number of permits")) %>%
+  ggplot() +
+  ggtitle("Value of non-residential building permits, annually, (x1,000) \n unadjusted current C$ NT, NU, YT") +
+  aes(x = year_month, y = permits, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() +
+  facet_grid(vars(variables)) ->
+  Clean_Building_Permits_NonResidential_Annually_Unadjusted_Current_Graph_3
+
+#graph 4 with current value QC, AB, BC, ON
+Transit_Building_Permits_NonResidential_Annually_Unajusted_Current %>%
+  filter(geo %in% c("Quebec", "Ontario", "Alberta", "British Columbia")) %>%
+  filter(!year_month %in% c(Incomplete_Year1, Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total non-residential")) %>%
+  filter(variables %in% c("Value of permits", "Number of permits")) %>%
+  ggplot() +
+  ggtitle("Value of non-residential building permits, annually, (x1,000), first difference \n unadjusted current C$ QC, AB, BC, ON") +
+  aes(x = year_month, y = permits_fd, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() +
+  facet_grid(vars(variables)) ->
+  Clean_Building_Permits_NonResidential_Annually_Unadjusted_Current_Graph_4
+
+#graph 5 with current value MB, NB, NL, NS, PE, SK
+Transit_Building_Permits_NonResidential_Annually_Unajusted_Current %>%
+  filter(geo %in% c("Newfoundland and Labrador", "Prince Edward Island", "Nova Scotia", "New Brunswick", "Manitoba", "Saskatchewan")) %>%
+  filter(!year_month %in% c(Incomplete_Year1, Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total non-residential")) %>%
+  filter(variables %in% c("Value of permits", "Number of permits")) %>%
+  ggplot() +
+  ggtitle("Value of non-residential building permits, annually, (x1,000), first difference \n unadjusted current C$ MB, NB, NL, NS, PE, SK") +
+  aes(x = year_month, y = permits_fd, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() +
+  facet_grid(vars(variables)) ->
+  Clean_Building_Permits_NonResidential_Annually_Unadjusted_Current_Graph_5
+
+#graph 6 with current value NT, NU, YT
+Transit_Building_Permits_NonResidential_Annually_Unajusted_Current %>%
+  filter(geo %in% c("Yukon", "Northwest Territories", "Nunavut")) %>%
+  filter(!year_month %in% c(Incomplete_Year1, Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total non-residential")) %>%
+  filter(variables %in% c("Value of permits", "Number of permits")) %>%
+  ggplot() +
+  ggtitle("Value of non-residential building permits, annually, (x1,000), first difference \n unadjusted current C$ NT, NU, YT") +
+  aes(x = year_month, y = permits_fd, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() +
+  facet_grid(vars(variables)) ->
+  Clean_Building_Permits_NonResidential_Annually_Unadjusted_Current_Graph_6
+
+#graph 7 with current value QC, AB, BC, ON
+Transit_Building_Permits_NonResidential_Annually_Unajusted_Current %>%
+  filter(geo %in% c("Quebec", "Ontario", "Alberta", "British Columbia")) %>%
+  filter(!year_month %in% c(Incomplete_Year1, Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total non-residential")) %>%
+  filter(variables %in% c("Value of permits", "Number of permits")) %>%
+  ggplot() +
+  ggtitle("Value of non-residential building permits, annually, percent change \n unadjusted current C$ QC, AB, BC, ON") +
+  aes(x = year_month, y = permits_pc, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() +
+  facet_grid(vars(variables)) ->
+  Clean_Building_Permits_NonResidential_Annually_Unadjusted_Current_Graph_7
+
+#graph 8 with current value MB, NB, NL, NS, PE, SK
+Transit_Building_Permits_NonResidential_Annually_Unajusted_Current %>%
+  filter(geo %in% c("Newfoundland and Labrador", "Prince Edward Island", "Nova Scotia", "New Brunswick", "Manitoba", "Saskatchewan")) %>%
+  filter(!year_month %in% c(Incomplete_Year1, Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total non-residential")) %>%
+  filter(variables %in% c("Value of permits", "Number of permits")) %>%
+  ggplot() +
+  ggtitle("Value of non-residential building permits, annually, percent change \n unadjusted current C$ MB, NB, NL, NS, PE, SK") +
+  aes(x = year_month, y = permits_pc, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() +
+  facet_grid(vars(variables)) ->
+  Clean_Building_Permits_NonResidential_Annually_Unadjusted_Current_Graph_8
+
+#graph 9 with current value NT, NU, YT
+Transit_Building_Permits_NonResidential_Annually_Unajusted_Current %>%
+  filter(geo %in% c("Yukon", "Northwest Territories", "Nunavut")) %>%
+  filter(!year_month %in% c(Incomplete_Year1, Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total non-residential")) %>%
+  filter(variables %in% c("Value of permits", "Number of permits")) %>%
+  ggplot() +
+  ggtitle("Value of non-residential building permits, annually, percent change \n unadjusted current C$ NT, NU, YT") +
+  aes(x = year_month, y = permits_pc, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() +
+  facet_grid(vars(variables)) ->
+  Clean_Building_Permits_NonResidential_Annually_Unadjusted_Current_Graph_9
+
+```
+
+### Building permits, Non-residential values and number of units, by type of dwelling, annual, unadjusted current (x1,000) Graph 1 - QC, AB, BC, ON
+
+```{r Building permits NonResidential values and number of units by type of dwelling annual unajusted current x1000 Graph 1, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Permits_NonResidential_Annually_Unadjusted_Current_Graph_1, dynamicTicks =  TRUE)
+```
+
+### Building permits, Non-residential values and number of units, by type of dwelling, annual, unadjusted current (x1,000) Graph 2 - MB, NB, NL, NS, PE, SK
+
+```{r Building permits NonResidential values and number of units by type of dwelling annual unajusted current x1000 Graph 2, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Permits_NonResidential_Annually_Unadjusted_Current_Graph_2, dynamicTicks =  TRUE)
+```
+
+### Building permits, Non-residential values and number of units, by type of dwelling, annual, unadjusted current (x1,000) Graph 3 - NT, NU, YT
+
+```{r Building permits NonResidential values and number of units by type of dwelling annual unajusted current x1000 Graph 3, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Permits_NonResidential_Annually_Unadjusted_Current_Graph_3, dynamicTicks =  TRUE)
+```
+
+
+### Building permits, Non-residential values and number of units, by type of dwelling, annual, unadjusted current (x1,000), first difference, Graph 4 - QC, AB, BC, ON
+
+```{r Building permits NonResidential values and number of units by type of dwelling annual unajusted current x1000 Graph 4, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Permits_NonResidential_Annually_Unadjusted_Current_Graph_4, dynamicTicks =  TRUE)
+```
+
+### Building permits, Non-residential values and number of units, by type of dwelling, annual, unadjusted current (x1,000), first difference, Graph 5 - MB, NB, NL, NS, PE, SK
+
+```{r Building permits NonResidential values and number of units by type of dwelling annual unajusted current x1000 Graph 5, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Permits_NonResidential_Annually_Unadjusted_Current_Graph_5, dynamicTicks =  TRUE)
+```
+
+### Building permits, Non-residential values and number of units, by type of dwelling, annual, unadjusted current (x1,000), first difference, Graph 6 - NT, NU, YT
+
+```{r Building permits NonResidential values and number of units by type of dwelling annual unajusted current x1000 Graph 6, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Permits_NonResidential_Annually_Unadjusted_Current_Graph_6, dynamicTicks =  TRUE)
+```
+
+### Building permits, Non-residential values and number of units, by type of dwelling, annual, unadjusted current, percent change, Graph 7 - QC, AB, BC, ON
+
+```{r Building permits NonResidential values and number of units by type of dwelling annual unajusted current x1000 Graph 7, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Permits_NonResidential_Annually_Unadjusted_Current_Graph_7, dynamicTicks =  TRUE)
+```
+
+### Building permits, Non-residential values and number of units, by type of dwelling, annual, unadjusted current, percent change, Graph 8 - MB, NB, NL, NS, PE, SK
+
+```{r Building permits NonResidential values and number of units by type of dwelling annual unajusted current x1000 Graph 8, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Permits_NonResidential_Annually_Unadjusted_Current_Graph_8, dynamicTicks =  TRUE)
+```
+
+### Building permits, Non-residential values and number of units, by type of dwelling, annual, unadjusted current, percent change, Graph 9 - NT, NU, YT
+
+```{r Building permits NonResidential values and number of units by type of dwelling annual unajusted current x1000 Graph 9, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Permits_NonResidential_Annually_Unadjusted_Current_Graph_9, dynamicTicks =  TRUE)
+```
+
+## Value and number of permits, Unadjusted constant
+## Building permits, residential values of permits, by type of dwelling, annual (x1,000)
+
+```{r Value of permits Residential Unajusted constant,  echo=FALSE, include=FALSE}
+
+# Building permits, residential values and number of units, by type of dwelling, annual
+# Value of permits, Unajusted current
+
+# unique(Building_Permits$type_of_structure) # used to find easily what variable is available
+# unique(Building_Permits$variables)
+# unique(Building_Permits$seasonal_adjustment)
+
+Building_Permits %>%
+  select(ref_date, geo, type_of_structure, type_of_work, variables, seasonal_adjustment, value) %>% #selected and keep only variable based on their column name
+  mutate(ref_date = parse_date(ref_date, "%Y-%m-%d")) %>% #turn format from : year-month-day  to date format
+  filter(ref_date > from_this_year) %>% #keep only variable based on their value and use from_this_year (line 55-56) as reference of where to start
+  filter(geo %in% provinces) %>% #use line 62-63 to only keep geographic value with either provinces name or Canada to get rid of the metropolitean area
+  filter(type_of_work %in% "Types of work, total") %>% #only keep the total type of work
+  filter(type_of_structure %in% c("Total residential", "Single dwelling building total", "Major single dwelling  projects", "Minor single dwelling projects", "Single total", "Mobile home", "Cottage", "Multiple dwelling building total", "Major multiple dwelling projects", "Minor multiple dwelling projects", "Double total", "Row total", "Apartment total")) %>%
+  filter(variables == "Value of permits") %>%
+  filter(seasonal_adjustment %in% "Unadjusted, constant") %>%
+  select(!type_of_work) %>% #get rid of type of work column
+  select(!seasonal_adjustment) %>% #get rid of seasonal_adjustment
+  select(!variables) %>% #get rid of seasonal_adjustment
+  rename_if(is.numeric, funs(str_c(., "_of_permits_unadjusted_constant"))) ->
+  Clean_Building_Permits_Residential_Annually_Unajusted_Constant
+
+data_permits_value_residential_tsbl_Unajusted_Constant <- as_tsibble(Clean_Building_Permits_Residential_Annually_Unajusted_Constant, key = c(geo, type_of_structure))
+data_permits_value_residential_tsbl_Unajusted_Constant %>%
+  group_by_key() %>%
+  index_by(year_month = ~ year(.)) %>%
+  summarise(
+    'permits' = sum(`value_of_permits_unadjusted_constant`, na.rm = TRUE)
+  ) -> Clean_Building_Permits_Residential_Annually_Unajusted_Constant
+
+Clean_Building_Permits_Residential_Annually_Unajusted_Constant %>%
+   mutate(across(where(is.character), as.factor)) %>%
+  arrange(type_of_structure, geo, year_month) %>%
+  group_by(type_of_structure, geo) %>%
+  mutate(across(where(is.numeric), fd_pc, .names = "{.col}_{.fn}")) %>% #used to create new columns from fd_pc function
+   mutate(across(where(is.numeric), round, 3)) %>% # round to 3 decimals
+    select(order(colnames(.))) %>%
+  relocate(where(is.numeric), .after = where((is.factor))) %>%
+  relocate(`year_month`)  %>%
+  select(!year_month_fd) %>% #get rid of useless columns
+  select(!year_month_pc) -> #get rid of useless columns
+  Transit_Building_Permits_Residential_Annually_Unajusted_Constant
+
+
+as_tibble(Transit_Building_Permits_Residential_Annually_Unajusted_Constant) %>%
+  pivot_wider(names_from = year_month, values_from = c(`permits`, `permits_fd`, `permits_pc`)) %>% #turn the ref_date into columns of value
+  clean_names() %>%
+  select(!str_c("permits_fd_", Incomplete_Year1)) %>% #get rid of useless columns
+  select(!str_c("permits_fd_", Incomplete_Year2)) %>% #get rid of useless columns
+  select(!str_c("permits_pc_", Incomplete_Year1)) %>% #get rid of useless columns
+  select(!str_c("permits_pc_", Incomplete_Year2)) -> #get rid of useless columns
+Clean_Building_Permits_Residential_Annually_Unajusted_Constant
+```
+
+## Building permits, residential values of permits, by type of dwelling, annual, unadjusted constant (x1,000) Table
+fd = first difference; pc = percent change
+```{r Value of permits Residential Unajusted constant dynamic table,  echo=FALSE}
+interactive_table(Clean_Building_Permits_Residential_Annually_Unajusted_Constant)
+```
+
+### Building permits, residential values of permits, by type of dwelling, annual, unadjusted constant (x1,000) Graph code
+
+```{r Building permits Residential values of permits by type of dwelling annual unajusted constant x1000 Graph code, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+
+#graph 1 with constant value : QC, AB, BC, ON
+Transit_Building_Permits_Residential_Annually_Unajusted_Constant %>%
+  filter(geo %in% c("Quebec", "Ontario", "Alberta", "British Columbia")) %>%
+  filter(!year_month %in% c(Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total residential")) %>%
+  ggplot() +
+  ggtitle("Value of residential building permits, annually, (x1,000) \n unadjusted constant K$ QC, AB, BC, ON") +
+  aes(x = year_month, y = permits, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() ->
+  Clean_Building_Permits_Residential_Annually_Unadjusted_Constant_Graph_1
+
+#graph 2 with constant value : QC, AB, BC, ON
+Transit_Building_Permits_Residential_Annually_Unajusted_Constant %>%
+  filter(geo %in% c("Quebec", "Ontario", "Alberta", "British Columbia")) %>%
+  filter(!year_month %in% c(Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total residential")) %>%
+  ggplot() +
+  ggtitle("Value of residential building permits, annually, (x1,000) \n unadjusted constant K$ MB, NB, NL, NS, PE, SK") +
+  aes(x = year_month, y = permits, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() ->
+  Clean_Building_Permits_Residential_Annually_Unadjusted_Constant_Graph_2
+
+#graph 3 with constant value : NT, NU, YT
+Transit_Building_Permits_Residential_Annually_Unajusted_Constant %>%
+  filter(geo %in% c("Yukon", "Northwest Territories", "Nunavut")) %>%
+  filter(!year_month %in% c(Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total residential")) %>%
+  ggplot() +
+  ggtitle("Value of residential building permits, annually, (x1,000) \n unadjusted constant K$ NT, NU, YT") +
+  aes(x = year_month, y = permits, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() ->
+  Clean_Building_Permits_Residential_Annually_Unadjusted_Constant_Graph_3
+
+#graph 4 with constant value : QC, AB, BC, ON
+Transit_Building_Permits_Residential_Annually_Unajusted_Constant %>%
+  filter(geo %in% c("Quebec", "Ontario", "Alberta", "British Columbia")) %>%
+  filter(!year_month %in% c(Incomplete_Year1, Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total residential")) %>%
+  ggplot() +
+  ggtitle("Value of residential building permits, annually, (x1,000), first difference, \n unadjusted constant K$ QC, AB, BC, ON") +
+  aes(x = year_month, y = permits_fd, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() ->
+  Clean_Building_Permits_Residential_Annually_Unadjusted_Constant_Graph_4
+
+#graph 5 with constant value : MB, NB, NL, NS, PE, SK
+Transit_Building_Permits_Residential_Annually_Unajusted_Constant %>%
+  filter(geo %in% c("Newfoundland and Labrador", "Prince Edward Island", "Nova Scotia", "New Brunswick", "Manitoba", "Saskatchewan")) %>%
+  filter(!year_month %in% c(Incomplete_Year1, Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total residential")) %>%
+  ggplot() +
+  ggtitle("Value of residential building permits, annually, (x1,000), first difference, \n unadjusted constant K$ MB, NB, NL, NS, PE, SK") +
+  aes(x = year_month, y = permits_fd, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() ->
+  Clean_Building_Permits_Residential_Annually_Unadjusted_Constant_Graph_5
+
+#graph 6 with constant value : NT, NU, YT
+Transit_Building_Permits_Residential_Annually_Unajusted_Constant %>%
+  filter(geo %in% c("Yukon", "Northwest Territories", "Nunavut")) %>%
+  filter(!year_month %in% c(Incomplete_Year1, Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total residential")) %>%
+  ggplot() +
+  ggtitle("Value of residential building permits, annually, (x1,000), first difference, \n unadjusted constant K$ NT, NU, YT") +
+  aes(x = year_month, y = permits_fd, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() ->
+  Clean_Building_Permits_Residential_Annually_Unadjusted_Constant_Graph_6
+
+#graph 7 with constant value : QC, AB, BC, ON
+Transit_Building_Permits_Residential_Annually_Unajusted_Constant %>%
+  filter(geo %in% c("Quebec", "Ontario", "Alberta", "British Columbia")) %>%
+  filter(!year_month %in% c(Incomplete_Year1, Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total residential")) %>%
+  ggplot() +
+  ggtitle("Value of residential building permits, annually, percent change, \n unadjusted constant K$ QC, AB, BC, ON") +
+  aes(x = year_month, y = permits_pc, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() ->
+  Clean_Building_Permits_Residential_Annually_Unadjusted_Constant_Graph_7
+
+#graph 8 with constant value : MB, NB, NL, NS, PE, SK
+Transit_Building_Permits_Residential_Annually_Unajusted_Constant %>%
+  filter(geo %in% c("Newfoundland and Labrador", "Prince Edward Island", "Nova Scotia", "New Brunswick", "Manitoba", "Saskatchewan")) %>%
+  filter(!year_month %in% c(Incomplete_Year1, Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total residential")) %>%
+  ggplot() +
+  ggtitle("Value of residential building permits, annually, percent change, \n unadjusted constant K$ MB, NB, NL, NS, PE, SK") +
+  aes(x = year_month, y = permits_pc, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() ->
+  Clean_Building_Permits_Residential_Annually_Unadjusted_Constant_Graph_8
+
+#graph 9 with constant value : QC, AB, BC, ON
+Transit_Building_Permits_Residential_Annually_Unajusted_Constant %>%
+  filter(geo %in% c("Yukon", "Northwest Territories", "Nunavut")) %>%
+  filter(!year_month %in% c(Incomplete_Year1, Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total residential")) %>%
+  ggplot() +
+  ggtitle("Value of residential building permits, annually, percent change, \n unadjusted constant K$ NT, NU, YT") +
+  aes(x = year_month, y = permits_pc, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() ->
+  Clean_Building_Permits_Residential_Annually_Unadjusted_Constant_Graph_9
+
+```
+
+### Building permits, residential values of permits, by type of dwelling, annual, unadjusted constant (x1,000) Graph 1, QC, AB, BC, ON
+
+```{r Building permits Residential values of permits by type of dwelling annual unajusted constant x1000 Graph 1, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Permits_Residential_Annually_Unadjusted_Constant_Graph_1, dynamicTicks =  TRUE)
+```
+
+### Building permits, residential values of permits, by type of dwelling, annual, unadjusted constant (x1,000) Graph 2, MB, NB, NL, NS, PE, SK
+
+```{r Building permits Residential values of permits by type of dwelling annual unajusted constant x1000 Graph 2, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Permits_Residential_Annually_Unadjusted_Constant_Graph_2, dynamicTicks =  TRUE)
+```
+
+### Building permits, residential values of permits, by type of dwelling, annual, unadjusted constant (x1,000) Graph 3, NT, NU, YT
+
+```{r Building permits Residential values of permits by type of dwelling annual unajusted constant x1000 Graph 3, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Permits_Residential_Annually_Unadjusted_Constant_Graph_3, dynamicTicks =  TRUE)
+```
+
+### Building permits, residential values of permits, by type of dwelling, annual, unadjusted constant (x1,000), first difference, Graph 4, QC, AB, BC, ON
+
+```{r Building permits Residential values of permits by type of dwelling annual unajusted constant x1000 Graph 4, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Permits_Residential_Annually_Unadjusted_Constant_Graph_4, dynamicTicks =  TRUE)
+```
+
+### Building permits, residential values of permits, by type of dwelling, annual, unadjusted constant (x1,000), first difference, Graph 5, MB, NB, NL, NS, PE, SK
+
+```{r Building permits Residential values of permits by type of dwelling annual unajusted constant x1000 Graph 5, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Permits_Residential_Annually_Unadjusted_Constant_Graph_5, dynamicTicks =  TRUE)
+```
+
+### Building permits, residential values of permits, by type of dwelling, annual, unadjusted constant (x1,000), first difference, Graph 6, NT, NU, YT
+
+```{r Building permits Residential values of permits by type of dwelling annual unajusted constant x1000 Graph 6, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Permits_Residential_Annually_Unadjusted_Constant_Graph_6, dynamicTicks =  TRUE)
+```
+
+### Building permits, residential values of permits, by type of dwelling, annual, unadjusted constant (x1,000), percent change, Graph 7, QC, AB, BC, ON
+
+```{r Building permits Residential values of permits by type of dwelling annual unajusted constant x1000 Graph 7, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Permits_Residential_Annually_Unadjusted_Constant_Graph_7, dynamicTicks =  TRUE)
+```
+
+### Building permits, residential values of permits, by type of dwelling, annual, unadjusted constant (x1,000), percent change, Graph 8, MB, NB, NL, NS, PE, SK
+
+```{r Building permits Residential values of permits by type of dwelling annual unajusted constant x1000 Graph 8, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Permits_Residential_Annually_Unadjusted_Constant_Graph_8, dynamicTicks =  TRUE)
+```
+
+### Building permits, residential values of permits, by type of dwelling, annual, unadjusted constant (x1,000), percent change, Graph 9, NT, NU, YT
+
+```{r Building permits Residential values of permits by type of dwelling annual unajusted constant x1000 Graph 9, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+plotly::ggplotly(Clean_Building_Permits_Residential_Annually_Unadjusted_Constant_Graph_9, dynamicTicks =  TRUE)
+```
+
+
+## Value and number of permits, Unadjusted constant
+## Building permits, Non-residential values of permits, by type of structure, annual (x1,000)
+
+```{r Value of permits NonResidential Unajusted constant,  echo=FALSE, include=FALSE}
+
+# Building permits, Non-residential values and number of units, by type of Structure, annual
+# Value of permits, Unajusted constant
+
+# unique(Building_Permits$type_of_structure) # used to find easily what variable is available
+# unique(Building_Permits$variables)
+# unique(Building_Permits$seasonal_adjustment)
+
+Building_Permits %>%
+  select(ref_date, geo, type_of_structure, type_of_work, variables, seasonal_adjustment, value) %>% #selected and keep only variable based on their column name
+  mutate(ref_date = parse_date(ref_date, "%Y-%m-%d")) %>% #turn format from : year-month-day  to date format
+  filter(ref_date > from_this_year) %>% #keep only variable based on their value and use from_this_year (line 55-56) as reference of where to start
+  filter(geo %in% provinces) %>% #use line 62-63 to only keep geographic value with either provinces name or Canada to get rid of the metropolitean area
+  filter(type_of_work %in% "Types of work, total") %>% #only keep the total type of work
+  filter(type_of_structure %in% c("Total non-residential", "Total industrial", "Total major industrial projects", "Total minor industrial projects", "Factories, plants", "Transportation, utilities", "Mining and agriculture", "Total commercial", "Total major commercial projects", "Total minor commercial projects", "Trade and services", "Warehouses", "Service stations", "Office buildings", "Recreation", "Hotels, restaurants", "Laboratories", "Total institutional and governmental", "Total major institutional and governmental projects", "Total minor institutional and governmental projects", "Schools, education", "Medical, hospital", "Welfare, home", "Churches, religion", "Government buildings")) %>%
+  filter(variables == "Value of permits") %>%
+  filter(seasonal_adjustment %in% "Unadjusted, constant") %>%
+  select(!type_of_work) %>% #get rid of type of work column
+  select(!seasonal_adjustment) %>% #get rid of seasonal_adjustment
+  select(!variables) %>% #get rid of seasonal_adjustment
+  rename_if(is.numeric, funs(str_c(., "_of_permits_unadjusted_constant"))) ->
+  Clean_Building_Permits_NonResidential_Annually_Unajusted_Constant
+
+data_permits_value_nonresidential_tsbl_Unajusted_Constant <- as_tsibble(Clean_Building_Permits_NonResidential_Annually_Unajusted_Constant, key = c(geo, type_of_structure))
+data_permits_value_nonresidential_tsbl_Unajusted_Constant %>%
+  group_by_key() %>%
+  index_by(year_month = ~ year(.)) %>%
+  summarise(
+    'permits' = sum(`value_of_permits_unadjusted_constant`, na.rm = TRUE)
+  ) -> Clean_Building_Permits_NonResidential_Annually_Unajusted_Constant
+
+Clean_Building_Permits_NonResidential_Annually_Unajusted_Constant %>%
+   mutate(across(where(is.character), as.factor)) %>%
+  arrange(type_of_structure, geo, year_month) %>%
+  group_by(type_of_structure, geo) %>%
+  mutate(across(where(is.numeric), fd_pc, .names = "{.col}_{.fn}")) %>%
+   mutate(across(where(is.numeric), round, 3)) %>%
+    select(order(colnames(.))) %>%
+  relocate(where(is.numeric), .after = where((is.factor))) %>%
+  relocate(`year_month`)  %>%
+  select(!year_month_fd) %>% #get rid of useless columns
+  select(!year_month_pc) -> #get rid of useless columns
+  Transit_Building_Permits_NonResidential_Annually_Unajusted_Constant
+
+
+as_tibble(Transit_Building_Permits_NonResidential_Annually_Unajusted_Constant) %>%
+  pivot_wider(names_from = year_month, values_from = c(`permits`, `permits_fd`, `permits_pc`)) %>% #turn the ref_date into columns of value
+  clean_names() %>%
+  select(!str_c("permits_fd_", Incomplete_Year1)) %>% #get rid of useless columns
+  select(!str_c("permits_fd_", Incomplete_Year2)) %>% #get rid of useless columns
+  select(!str_c("permits_pc_", Incomplete_Year1)) %>% #get rid of useless columns
+  select(!str_c("permits_pc_", Incomplete_Year2)) -> #get rid of useless columns
+Clean_Building_Permits_NonResidential_Annually_Unajusted_Constant
+
+```
+
+## Building permits, Non-residential values of permits, by type of structure, annual, unajusted constant (x1,000) Table
+fd = first difference; pc = percent change
+```{r Value of permits NonResidential Unajusted constant unajusted constant,  echo=FALSE}
+interactive_table(Clean_Building_Permits_NonResidential_Annually_Unajusted_Constant)
+```
+
+### Building permits, non-residential values of permits, by type of dwelling, annual, unajusted constant (x1,000) Graph code
+
+```{r Graph code Building permits NonResidential unajusted constant x1000, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+
+#graph 1 with constant value : QC, AB, BC, ON
+Transit_Building_Permits_NonResidential_Annually_Unajusted_Constant %>%
+  filter(geo %in% c("Quebec", "Ontario", "Alberta", "British Columbia")) %>%
+  filter(!year_month %in% c(Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total non-residential")) %>%
+  ggplot() +
+  ggtitle("Value of non-residential building permits, annually, (x1,000) \n unadjusted constant K$, QC, AB, BC, ON") +
+  aes(x = year_month, y = permits, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() ->
+  Clean_Building_Permits_NonResidential_Annually_Unadjusted_Constant_Graph_1
+
+#graph 2 with constant value : MB, NB, NL, NS, PE, SK
+Transit_Building_Permits_NonResidential_Annually_Unajusted_Constant %>%
+  filter(geo %in% c("Newfoundland and Labrador", "Prince Edward Island", "Nova Scotia", "New Brunswick", "Manitoba", "Saskatchewan")) %>%
+  filter(!year_month %in% c(Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total non-residential")) %>%
+  ggplot() +
+  ggtitle("Value of non-residential building permits, annually, (x1,000) \n unadjusted constant K$, MB, NB, NL, NS, PE, SK") +
+  aes(x = year_month, y = permits, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() ->
+  Clean_Building_Permits_NonResidential_Annually_Unadjusted_Constant_Graph_2
+
+
+#graph 3 with constant value : NT, NU, YT
+Transit_Building_Permits_NonResidential_Annually_Unajusted_Constant %>%
+  filter(geo %in% c("Yukon", "Northwest Territories", "Nunavut")) %>%
+  filter(!year_month %in% c(Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total non-residential")) %>%
+  ggplot() +
+  ggtitle("Value of non-residential building permits, annually, (x1,000) \n unadjusted constant K$, NT, NU, YT") +
+  aes(x = year_month, y = permits, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() ->
+  Clean_Building_Permits_NonResidential_Annually_Unadjusted_Constant_Graph_3
+
+#graph 4 with constant value : QC, AB, BC, ON
+Transit_Building_Permits_NonResidential_Annually_Unajusted_Constant %>%
+  filter(geo %in% c("Quebec", "Ontario", "Alberta", "British Columbia")) %>%
+  filter(!year_month %in% c(Incomplete_Year1, Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total non-residential")) %>%
+  ggplot() +
+  ggtitle("Value of non-residential building permits, annually, (x1,000), first difference \n unadjusted constant K$, QC, AB, BC, ON") +
+  aes(x = year_month, y = permits_fd, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() ->
+  Clean_Building_Permits_NonResidential_Annually_Unadjusted_Constant_Graph_4
+
+#graph 5 with constant value : MB, NB, NL, NS, PE, SK
+Transit_Building_Permits_NonResidential_Annually_Unajusted_Constant %>%
+  filter(geo %in% c("Newfoundland and Labrador", "Prince Edward Island", "Nova Scotia", "New Brunswick", "Manitoba", "Saskatchewan")) %>%
+  filter(!year_month %in% c(Incomplete_Year1, Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total non-residential")) %>%
+  ggplot() +
+  ggtitle("Value of non-residential building permits, annually, (x1,000), first difference \n unadjusted constant K$, MB, NB, NL, NS, PE, SK") +
+  aes(x = year_month, y = permits_fd, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() ->
+  Clean_Building_Permits_NonResidential_Annually_Unadjusted_Constant_Graph_5
+
+#graph 6 with constant value : NT, NU, YT
+Transit_Building_Permits_NonResidential_Annually_Unajusted_Constant %>%
+  filter(geo %in% c("Yukon", "Northwest Territories", "Nunavut")) %>%
+  filter(!year_month %in% c(Incomplete_Year1, Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total non-residential")) %>%
+  ggplot() +
+  ggtitle("Value of non-residential building permits, annually, (x1,000), first difference \n unadjusted constant K$, NT, NU, YT") +
+  aes(x = year_month, y = permits_fd, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() ->
+  Clean_Building_Permits_NonResidential_Annually_Unadjusted_Constant_Graph_6
+
+#graph 7 with constant value : QC, AB, BC, ON
+Transit_Building_Permits_NonResidential_Annually_Unajusted_Constant %>%
+  filter(geo %in% c("Quebec", "Ontario", "Alberta", "British Columbia")) %>%
+  filter(!year_month %in% c(Incomplete_Year1, Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total non-residential")) %>%
+  ggplot() +
+  ggtitle("Value of non-residential building permits, annually, (x1,000), percent change \n unadjusted constant K$, QC, AB, BC, ON") +
+  aes(x = year_month, y = permits_pc, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() ->
+  Clean_Building_Permits_NonResidential_Annually_Unadjusted_Constant_Graph_7
+
+#graph 8 with constant value : MB, NB, NL, NS, PE, SK
+Transit_Building_Permits_NonResidential_Annually_Unajusted_Constant %>%
+  filter(geo %in% c("Newfoundland and Labrador", "Prince Edward Island", "Nova Scotia", "New Brunswick", "Manitoba", "Saskatchewan")) %>%
+  filter(!year_month %in% c(Incomplete_Year1, Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total non-residential")) %>%
+  ggplot() +
+  ggtitle("Value of non-residential building permits, annually, (x1,000), percent change \n unadjusted constant K$, MB, NB, NL, NS, PE, SK") +
+  aes(x = year_month, y = permits_pc, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() ->
+  Clean_Building_Permits_NonResidential_Annually_Unadjusted_Constant_Graph_8
+
+#graph 9 with constant value : NT, NU, YT
+Transit_Building_Permits_NonResidential_Annually_Unajusted_Constant %>%
+  filter(geo %in% c("Yukon", "Northwest Territories", "Nunavut")) %>%
+  filter(!year_month %in% c(Incomplete_Year1, Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(type_of_structure %in% c("Total non-residential")) %>%
+  ggplot() +
+  ggtitle("Value of non-residential building permits, annually, (x1,000), percent change \n unadjusted constant K$, NT, NU, YT") +
+  aes(x = year_month, y = permits_pc, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() ->
+  Clean_Building_Permits_NonResidential_Annually_Unadjusted_Constant_Graph_9
+
+```
+
+### Building permits, non-residential values of permits, by type of dwelling, annual, unadjusted constant (x1,000) Graph 1, QC, AB, BC, ON
+
+```{r Graph 1 Building permits NonResidential unajusted constant x1000, fig.height=6,  echo=FALSE, fig.width=9, layout="l-screen-inset"}
+plotly::ggplotly(Clean_Building_Permits_NonResidential_Annually_Unadjusted_Constant_Graph_1, dynamicTicks =  TRUE)
+```
+
+### Building permits, non-residential values of permits, by type of dwelling, annual, unadjusted constant (x1,000) Graph 2, MB, NB, NL, NS, PE, SK
+
+```{r Graph 2 Building permits NonResidential unajusted constant x1000, fig.height=6,  echo=FALSE, fig.width=9, layout="l-screen-inset"}
+plotly::ggplotly(Clean_Building_Permits_NonResidential_Annually_Unadjusted_Constant_Graph_2, dynamicTicks =  TRUE)
+```
+
+### Building permits, non-residential values of permits, by type of dwelling, annual, unadjusted constant (x1,000) Graph 3, NT, NU, YT
+
+```{r Graph 3 Building permits NonResidential unajusted constant x1000, fig.height=6,  echo=FALSE, fig.width=9, layout="l-screen-inset"}
+plotly::ggplotly(Clean_Building_Permits_NonResidential_Annually_Unadjusted_Constant_Graph_3, dynamicTicks =  TRUE)
+```
+
+### Building permits, non-residential values of permits, by type of dwelling, annual, unadjusted constant (x1,000), first difference, Graph 4, QC, AB, BC, ON
+
+```{r Graph 4 Building permits NonResidential unajusted constant x1000, fig.height=6,  echo=FALSE, fig.width=9, layout="l-screen-inset"}
+plotly::ggplotly(Clean_Building_Permits_NonResidential_Annually_Unadjusted_Constant_Graph_4, dynamicTicks =  TRUE)
+```
+
+### Building permits, non-residential values of permits, by type of dwelling, annual, unadjusted constant (x1,000), first difference, Graph 5, MB, NB, NL, NS, PE, SK
+
+```{r Graph 5 Building permits NonResidential unajusted constant x1000, fig.height=6,  echo=FALSE, fig.width=9, layout="l-screen-inset"}
+plotly::ggplotly(Clean_Building_Permits_NonResidential_Annually_Unadjusted_Constant_Graph_5, dynamicTicks =  TRUE)
+```
+
+### Building permits, non-residential values of permits, by type of dwelling, annual, unadjusted constant (x1,000), first difference, Graph 6, NT, NU, YT
+
+```{r Graph 6 Building permits NonResidential unajusted constant x1000, fig.height=6,  echo=FALSE, fig.width=9, layout="l-screen-inset"}
+plotly::ggplotly(Clean_Building_Permits_NonResidential_Annually_Unadjusted_Constant_Graph_6, dynamicTicks =  TRUE)
+```
+
+### Building permits, non-residential values of permits, by type of dwelling, annual, unadjusted constant, percent change, Graph 7, QC, AB, BC, ON
+
+```{r Graph 7 Building permits NonResidential unajusted constant x1000, fig.height=6,  echo=FALSE, fig.width=9, layout="l-screen-inset"}
+plotly::ggplotly(Clean_Building_Permits_NonResidential_Annually_Unadjusted_Constant_Graph_7, dynamicTicks =  TRUE)
+```
+
+### Building permits, non-residential values of permits, by type of dwelling, annual, unadjusted constant, percent change, Graph 8, MB, NB, NL, NS, PE, SK
+
+```{r Graph 8 Building permits NonResidential unajusted constant x1000, fig.height=6,  echo=FALSE, fig.width=9, layout="l-screen-inset"}
+plotly::ggplotly(Clean_Building_Permits_NonResidential_Annually_Unadjusted_Constant_Graph_8, dynamicTicks =  TRUE)
+```
+
+### Building permits, non-residential values of permits, by type of dwelling, annual, unadjusted constant, percent change, Graph 9, NT, NU, YT
+
+```{r Graph 9 Building permits NonResidential unadjusted constant x1000, fig.height=6,  echo=FALSE, fig.width=9, layout="l-screen-inset"}
+plotly::ggplotly(Clean_Building_Permits_NonResidential_Annually_Unadjusted_Constant_Graph_9, dynamicTicks =  TRUE)
+```
+
+
+
+# Capital and repair expenditures data
+
+```{r Capital and repair expenditures data,  echo=FALSE, include=FALSE}
+
+Capital_expenditure <- cansim::get_cansim(capital_repair_expenditure_table_number)
+Capital_expenditure <- janitor::clean_names(Capital_expenditure)
+
+
+```
+
+## Capital and repair expenditures (x 1,000,000)
+
+```{r Capital and repair expenditures,  echo=FALSE, include=FALSE}
+# Capital and repair expenditures, Non-residential tangible assets, by industry and geography (x 1,000,000), annual
+# table 34-10-0035-01 : capital and repair expenditure
+
+
+# unique(Capital_expenditure$north_american_industry_classification_system_naics)
+
+
+Capital_expenditure %>%
+  select(ref_date, geo, capital_and_repair_expenditures, north_american_industry_classification_system_naics, value) %>% #selected and keep only variable based on their column name
+  mutate(ref_date = parse_date(ref_date, "%Y")) %>% #turn format from : year  to date format
+  filter(ref_date > from_this_year) %>% #keep only variable based on their value and use from_this_year (line 55-56) as reference of where to start
+  filter(geo %in% provinces) %>% #use line 62-63 to only keep geographic value with either provinces name or Canada to get rid of the metropolitean area
+  rename_if(is.numeric, funs(str_c(., "_capital_and_repair_expenditures"))) -> Clean_Capital_Repair_Expenditure_Annually
+
+#these two function are to fuse monthly value into yearly value bases on key columns
+data_capital_expenditure_tsbl <- as_tsibble(Clean_Capital_Repair_Expenditure_Annually, key = c(geo, capital_and_repair_expenditures, north_american_industry_classification_system_naics))
+data_capital_expenditure_tsbl %>%
+  group_by_key() %>% 
+  index_by(year_month = ~ year(.)) %>%
+  summarise(
+    'expenditures' = sum(`value_capital_and_repair_expenditures`, na.rm = TRUE)
+  ) -> Clean_Capital_Repair_Expenditure_Annually
+
+Clean_Capital_Repair_Expenditure_Annually %>%
+   mutate(across(where(is.character), as.factor)) %>%
+  arrange(capital_and_repair_expenditures, north_american_industry_classification_system_naics, geo, year_month) %>%
+  group_by(capital_and_repair_expenditures, north_american_industry_classification_system_naics, geo) %>%
+  mutate(across(where(is.numeric), fd_pc, .names = "{.col}_{.fn}")) %>% #create column based on function fd_pc
+   mutate(across(where(is.numeric), round, 3)) %>% # round for three decimal
+    select(order(colnames(.))) %>%
+  relocate(where(is.numeric), .after = where((is.factor))) %>%
+  relocate(`year_month`)  %>%
+  select(!year_month_fd) %>% #get rid of useless columns
+  select(!year_month_pc) -> #get rid of useless columns
+ Transit_Capital_Repair_Expenditure_Annually
+
+as_tibble(Transit_Capital_Repair_Expenditure_Annually) %>%
+  pivot_wider(names_from = year_month, values_from = c(`expenditures`, `expenditures_fd`, `expenditures_pc`)) %>% #turn the ref_date into columns of value
+  clean_names() %>% #useful for future formatting.
+  select(!str_c("expenditures_fd_", Incomplete_Year1)) %>% #get rid of useless columns
+  select(!str_c("expenditures_fd_", Incomplete_Year2)) %>% #get rid of useless columns
+  select(!str_c("expenditures_pc_", Incomplete_Year1)) %>% #get rid of useless columns
+  select(!str_c("expenditures_pc_", Incomplete_Year2)) -> #get rid of useless columns
+Clean_Capital_Repair_Expenditure_Annually
+```
+
+
+## Capital and repair expenditures (1,000,000) Table
+fd = first difference; pc = percent change
+```{r Capital and repair expenditures dynamic table,  echo=FALSE}
+interactive_table(Clean_Capital_Repair_Expenditure_Annually) # create the dynamic table
+```
+
+### Capital and repair expenditures (1,000,000) Graph code
+
+```{r  Capital and repair expenditures x1000000 Graph code Graph code,  echo=FALSE, fig.height=6, fig.width=9, layout="l-screen-inset"}
+
+#unique(Transit_Capital_Repair_Expenditure_Annually$north_american_industry_classification_system_naics)
+
+#graph 1 : QC, AB, BC, ON
+Transit_Capital_Repair_Expenditure_Annually %>%
+  filter(geo %in% c("Quebec", "Ontario", "Alberta", "British Columbia")) %>%
+  filter(!year_month %in% c(Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(capital_and_repair_expenditures %in% c("Capital expenditures")) %>%
+  filter(north_american_industry_classification_system_naics %in% c("All Industries")) %>%
+  # "Agriculture, forestry, fishing and hunting [11]", "Mining, quarrying, and oil and gas extraction [21]", "Utilities [22]", "Construction [23]", "Manufacturing [31-33]", "Wholesale trade [41]", "Retail trade [44-45]", "Transportation and warehousing [48-49]", "Information and cultural industries [51]", "Finance and insurance [52]", "Real estate and rental and leasing [53]", "Professional, scientific and technical services [54]", "Management of companies and enterprises [55]", "Administrative and support, waste management and remediation services [56]", "Educational services [61]", "Health care and social assistance [62]", "Arts, entertainment and recreation [71]", "Accommodation and food services [72]", "Other services (except public administration) [81]", "Public administration [91]"
+  ggplot() +
+  ggtitle("Capital and repair expenditures (1,000,000) \n QC, AB, BC, ON") +
+  aes(x = year_month, y = expenditures, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() ->
+  Clean__Capital_Repair_Expenditure_Annually_Graph_1
+
+#graph 2 : MB, NB, NL, NS, PE, SK
+Transit_Capital_Repair_Expenditure_Annually %>%
+  filter(geo %in% c("Newfoundland and Labrador", "Prince Edward Island", "Nova Scotia", "New Brunswick", "Manitoba", "Saskatchewan")) %>%
+  filter(!year_month %in% c(Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(capital_and_repair_expenditures %in% c("Capital expenditures")) %>%
+  filter(north_american_industry_classification_system_naics %in% c("All Industries")) %>%
+  ggplot() +
+  ggtitle("Capital and repair expenditures (1,000,000) \n  MB, NB, NL, NS, PE, SK") +
+  aes(x = year_month, y = expenditures, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() ->
+  Clean__Capital_Repair_Expenditure_Annually_Graph_2
+
+#graph 3 : NT, NU, YT
+Transit_Capital_Repair_Expenditure_Annually %>%
+  filter(geo %in% c("Yukon", "Northwest Territories", "Nunavut")) %>%
+  filter(!year_month %in% c(Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(capital_and_repair_expenditures %in% c("Capital expenditures")) %>%
+  filter(north_american_industry_classification_system_naics %in% c("All Industries")) %>%
+  ggplot() +
+  ggtitle("Capital and repair expenditures (1,000,000) \n  NT, NU, YT") +
+  aes(x = year_month, y = expenditures, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() ->
+  Clean__Capital_Repair_Expenditure_Annually_Graph_3
+
+#graph 4 : QC, AB, BC, ON
+Transit_Capital_Repair_Expenditure_Annually %>%
+  filter(geo %in% c("Quebec", "Ontario", "Alberta", "British Columbia")) %>%
+  filter(!year_month %in% c(Incomplete_Year1, Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(capital_and_repair_expenditures %in% c("Capital expenditures")) %>%
+  filter(north_american_industry_classification_system_naics %in% c("All Industries")) %>%
+  ggplot() +
+  ggtitle("Capital and repair expenditures (1,000,000), first difference \n  QC, AB, BC, ON") +
+  aes(x = year_month, y = expenditures_fd, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() ->
+  Clean__Capital_Repair_Expenditure_Annually_Graph_4
+
+#graph 5 : MB, NB, NL, NS, PE, SK
+Transit_Capital_Repair_Expenditure_Annually %>%
+  filter(geo %in% c("Newfoundland and Labrador", "Prince Edward Island", "Nova Scotia", "New Brunswick", "Manitoba", "Saskatchewan")) %>%
+  filter(!year_month %in% c(Incomplete_Year1, Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(capital_and_repair_expenditures %in% c("Capital expenditures")) %>%
+  filter(north_american_industry_classification_system_naics %in% c("All Industries")) %>%
+  ggplot() +
+  ggtitle("Capital and repair expenditures (1,000,000), first difference \n  MB, NB, NL, NS, PE, SK") +
+  aes(x = year_month, y = expenditures_fd, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() ->
+  Clean__Capital_Repair_Expenditure_Annually_Graph_5
+
+#graph 6 : NT, NU, YT
+Transit_Capital_Repair_Expenditure_Annually %>%
+  filter(geo %in% c("Yukon", "Northwest Territories", "Nunavut")) %>%
+  filter(!year_month %in% c(Incomplete_Year1, Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(capital_and_repair_expenditures %in% c("Capital expenditures")) %>%
+  filter(north_american_industry_classification_system_naics %in% c("All Industries")) %>%
+  ggplot() +
+  ggtitle("Capital and repair expenditures (1,000,000), first difference \n NT, NU, YT") +
+  aes(x = year_month, y = expenditures_fd, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() ->
+  Clean__Capital_Repair_Expenditure_Annually_Graph_6
+
+#graph 7 : QC, AB, BC, ON
+Transit_Capital_Repair_Expenditure_Annually %>%
+  filter(geo %in% c("Quebec", "Ontario", "Alberta", "British Columbia")) %>%
+  filter(!year_month %in% c(Incomplete_Year1, Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(capital_and_repair_expenditures %in% c("Capital expenditures")) %>%
+  filter(north_american_industry_classification_system_naics %in% c("All Industries")) %>%
+  ggplot() +
+  ggtitle("Capital and repair expenditures, percent change \n QC, AB, BC, ON") +
+  aes(x = year_month, y = expenditures_pc, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() ->
+  Clean__Capital_Repair_Expenditure_Annually_Graph_7
+
+#graph 8 : MB, NB, NL, NS, PE, SK
+Transit_Capital_Repair_Expenditure_Annually %>%
+  filter(geo %in% c("Newfoundland and Labrador", "Prince Edward Island", "Nova Scotia", "New Brunswick", "Manitoba", "Saskatchewan")) %>%
+  filter(!year_month %in% c(Incomplete_Year1, Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(capital_and_repair_expenditures %in% c("Capital expenditures")) %>%
+  filter(north_american_industry_classification_system_naics %in% c("All Industries")) %>%
+  ggplot() +
+  ggtitle("Capital and repair expenditures, percent change \n  MB, NB, NL, NS, PE, SK") +
+  aes(x = year_month, y = expenditures_pc, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() ->
+  Clean__Capital_Repair_Expenditure_Annually_Graph_8
+
+#graph 9 : NT, NU, YT
+Transit_Capital_Repair_Expenditure_Annually %>%
+  filter(geo %in% c("Yukon", "Northwest Territories", "Nunavut")) %>%
+  filter(!year_month %in% c(Incomplete_Year1, Incomplete_Year2)) %>% # get rid of the incomplete years
+  filter(capital_and_repair_expenditures %in% c("Capital expenditures")) %>%
+  filter(north_american_industry_classification_system_naics %in% c("All Industries")) %>%
+  ggplot() +
+  ggtitle("Capital and repair expenditures (1,000,000), percent change \n NT, NU, YT") +
+  aes(x = year_month, y = expenditures_pc, colour = geo) +
+  xlab("Year") +
+  ylab("Value \n ") +
+  geom_line(size = 0.7) +
+  scale_color_hue() +
+  theme_minimal() ->
+  Clean__Capital_Repair_Expenditure_Annually_Graph_9
+
+```
+
+### Capital and repair expenditures (1,000,000) Graph 1, all industry, QC, AB, BC, ON
+
+```{r Capital and repair expenditures x1000000 Graph 1,  echo=FALSE, fig.height=6, fig.width=9, layout="l-screen-inset"}
+plotly::ggplotly(Clean__Capital_Repair_Expenditure_Annually_Graph_1, dynamicTicks =  TRUE)
+```
+
+### Capital and repair expenditures (1,000,000) Graph 2, all industry, MB, NB, NL, NS, PE, SK
+
+```{r Capital and repair expenditures x1000000 Graph 2,  echo=FALSE, fig.height=6, fig.width=9, layout="l-screen-inset"}
+plotly::ggplotly(Clean__Capital_Repair_Expenditure_Annually_Graph_2, dynamicTicks =  TRUE)
+```
+
+### Capital and repair expenditures (1,000,000) Graph 3, all industry, NT, NU, YT
+
+```{r Capital and repair expenditures x1000000 Graph 3,  echo=FALSE, fig.height=6, fig.width=9, layout="l-screen-inset"}
+plotly::ggplotly(Clean__Capital_Repair_Expenditure_Annually_Graph_3, dynamicTicks =  TRUE)
+```
+
+
+### Capital and repair expenditures (1,000,000) Graph 4, all industry, first difference, QC, AB, BC, ON
+
+```{r Capital and repair expenditures x1000000 Graph 4,  echo=FALSE, fig.height=6, fig.width=9, layout="l-screen-inset"}
+plotly::ggplotly(Clean__Capital_Repair_Expenditure_Annually_Graph_4, dynamicTicks =  TRUE)
+```
+
+### Capital and repair expenditures (1,000,000) Graph 5, all industry, first difference,  MB, NB, NL, NS, PE, SK
+
+```{r Capital and repair expenditures x1000000 Graph 5,  echo=FALSE, fig.height=6, fig.width=9, layout="l-screen-inset"}
+plotly::ggplotly(Clean__Capital_Repair_Expenditure_Annually_Graph_5, dynamicTicks =  TRUE)
+```
+
+### Capital and repair expenditures (1,000,000) Graph 6, all industry, first difference, NT, NU, YT
+
+```{r Capital and repair expenditures x1000000 Graph 6,  echo=FALSE, fig.height=6, fig.width=9, layout="l-screen-inset"}
+plotly::ggplotly(Clean__Capital_Repair_Expenditure_Annually_Graph_6, dynamicTicks =  TRUE)
+```
+
+### Capital and repair expenditures Graph 7, all industry, percent change, QC, AB, BC, ON
+
+```{r Capital and repair expenditures x1000000 Graph 7,  echo=FALSE, fig.height=6, fig.width=9, layout="l-screen-inset"}
+plotly::ggplotly(Clean__Capital_Repair_Expenditure_Annually_Graph_7, dynamicTicks =  TRUE)
+```
+
+### Capital and repair expenditures Graph 8, all industry, percent change,  MB, NB, NL, NS, PE, SK
+
+```{r Capital and repair expenditures x1000000 Graph 8,  echo=FALSE, fig.height=6, fig.width=9, layout="l-screen-inset"}
+plotly::ggplotly(Clean__Capital_Repair_Expenditure_Annually_Graph_8, dynamicTicks =  TRUE)
+```
+
+### Capital and repair expenditures Graph 9, all industry, percent change, NT, NU, YT
+
+```{r Capital and repair expenditures x1000000 Graph 9,  echo=FALSE, fig.height=6, fig.width=9, layout="l-screen-inset"}
+plotly::ggplotly(Clean__Capital_Repair_Expenditure_Annually_Graph_9, dynamicTicks =  TRUE)
+```

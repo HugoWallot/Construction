@@ -19,7 +19,6 @@ Notes to readers :
   There is a lot of missing data on building permits which might cause irregularity in the table.
   The first three code of : code and function parameters need to be updated once a year in early march.
 
-  Many graphs have half years graduation noted at 2018.5, 2019, 2019.5 . These value are a bug because the year are used as index and date isn't a valid format for index and therefore I used Numeric value for dates which cause this distortion in the graph. It can be solved by shrinking the width of the graph or by adding more years to the graphs. If more years are added to the graph, the Building permits code must be extended due to the limitation of data pulled using the vector methode of the cansim package which is needed because the Building permits database is too large (multiple millions). As an exemple, the Construction investment database is small enough to be pulled fully and has 5+ millions data.
 
 # Introduction
 

@@ -19,6 +19,8 @@ Notes to readers :
   There is a lot of missing data on building permits which might cause irregularity in the table.
   The first three code of : code and function parameters need to be updated once a year in early march.
 
+  Many graphs have half years graduation noted at 2018.5, 2019, 2019.5 . These value are a bug because the year are used as index and date isn't a valid format for index and therefore I used Numeric value for dates which cause this distortion in the graph. It can be solved by shrinking the width of the graph or by adding more years to the graphs. If more years are added to the graph, the Building permits code must be extended due to the limitation of data pulled using the vector methode of the cansim package which is needed because the Building permits database is too large (multiple millions). As an exemple, the Construction investment database is small enough to be pulled fully and has 5+ millions data.
+
 # Introduction
 
 -   Investment in Building Construction(monthly) [34-10-0175-01](https://www150.statcan.gc.ca/t1/tbl1/en/cv.action?pid=3410017501)
@@ -33,6 +35,11 @@ Notes to readers :
 # The package rmarkdown must be set as library before running any other code or R studio might crash.
 
 # Sys.setenv(LANG = "en") # use to turn error message to english in order to quick google search information if needed
+
+# the graphs show years with decimal value because they are numeric value due to formating as we summed months value into year. The problem is that they are now an index as reference for the other value because we use a pivot function to fuse them with the values to form column per year. This cause a problem, because date or character cannot be used as index. I've tried turning tham to character or date after the fact, but in the dynamic graph, in order to have a line graph, we also need numeric values. I've tried to use the function scale_x_continuous(breaks = seq(2018, 2020, by = 1), limits = c(2017, 2020)) in order to force the break of the decimal and avoir the error of : 2018.5 2019 2019.5 
+# This function did not work as there are not enough years. The problem seems to persist with 4 years of reference and seems to be gone with 5 years of reference. I could solve the bug by having more years in the graphs, but it would require a substential change to the building permits since the data base is too large. The other solution is to shrink the graphs to reduce the numbers of visible years which isn'T optimal for the eyes. I've reduce the width from 9 to 6 for the construction investment annual constant to have both visible result.
+
+#Problem downloading data, status code 409 : This mean the cansim ndm Table are being update, so we just need to wait a bit a run the code again.
 
 
 ```
@@ -54,6 +61,7 @@ Here's a list of all the necessery package to run the program.
 # install.packages("plotly") #added by Hugo 
 # install.packages("summarytools")
 # install.packages("gapminder")
+# install.packages("lubridate")
 
 
 library(rmarkdown) # to avoid fatal error when running chunk of code
@@ -67,6 +75,7 @@ library(summarytools) # quickly summarise data
 library(gapminder) # used in test example
 library(tsibble) # needed for functions
 library(params) # needed to compile
+library(lubridate) #needed for date format
 
 # If you get fatal error or R studio crashes, open an untitle new R doc. Copypaste the install functions. Run the function, then go to packages in the middle right of R studio (under global environment) and search mannually for the packages to set them as library by clicking on the square next to their names.
 
@@ -81,11 +90,11 @@ This section includes global function of which many have been imported from the 
 ```{r core functions and parameters, echo=FALSE}
 
 # paramters for the project : This year can be changed to extand the length of the final tables.
-from_this_year <- "2016-12-29"
+from_this_year <- "2014-12-29"
 
 #This part of the code is used to get rid of incomplete columns which cause distortion in the percent change and first difference value.
 
-Incomplete_Year1 <- "2017"
+Incomplete_Year1 <- "2015"
 Incomplete_Year2 <- "2021"
 
 
@@ -99,7 +108,7 @@ provinces <- c(
 #table numbers
 building_construction_table_number <- "34-10-0175-01"
 capital_repair_expenditure_table_number <- "34-10-0035-01"
-building_permits_table_number <- "34-10-0066-01 "
+building_permits_table_number <- "34-10-0066-01"
 
 provincial_two_digit_cord <- c("1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.1.10", "1.1.11", "1.1.12", "1.1.13", "1.1.14", "1.1.15", "1.1.16", "1.1.17", "1.1.18", "1.1.19", "1.1.20", "1.1.21", "2.1.1", "2.1.2", "2.1.3", "2.1.4", "2.1.5", "2.1.6", "2.1.7", "2.1.8", "2.1.9", "2.1.10", "2.1.11", "2.1.12", "2.1.13", "2.1.14", "2.1.15", "2.1.16", "2.1.17", "2.1.18", "2.1.19", "2.1.20", " 2.1.21", "3.1.1", "3.1.2", "3.1.3", "3.1.4", "3.1.5", "3.1.6", "3.1.7", "3.1.8", "3.1.9", "3.1.10", "3.1.11", "3.1.12", "3.1.13", "3.1.14", "3.1.15", "3.1.16", "3.1.17", "3.1.18", "3.1.19", "3.1.20", "3.1.21", "4.1.1", "4.1.2", "4.1.3", "4.1.4", "4.1.5", "4.1.6", "4.1.7", "4.1.8", "4.1.9", "4.1.10", "4.1.11", "4.1.12", "4.1.13", "4.1.14", "4.1.15", "4.1.16", "4.1.17", "4.1.18", "4.1.19", "4.1.20", "4.1.21", "5.1.1", "5.1.2", "5.1.3", "5.1.4", "5.1.5", "5.1.6", "5.1.7", "5.1.8", "5.1.9", "5.1.10", "5.1.11", "5.1.12", "5.1.13", "5.1.14", "5.1.15", "5.1.16", "5.1.17", "5.1.18", "5.1.19", "5.1.20", "5.1.21", "6.1.1", "6.1.2", "6.1.3", "6.1.4", "6.1.5", "6.1.6", "6.1.7", "6.1.8", "6.1.9", "6.1.10", "6.1.11", "6.1.12", "6.1.13", "6.1.14", "6.1.15", "6.1.16", "6.1.17", "6.1.18", "6.1.19", "6.1.20", "6.1.21", "7.1.1", "7.1.2", "7.1.3", "7.1.4", "7.1.5", "7.1.6", "7.1.7", "7.1.8", "7.1.9", "7.1.10", "7.1.11", "7.1.12", "7.1.13", "7.1.14", "7.1.15", "7.1.16", "7.1.17", "7.1.18", "7.1.19", "7.1.20", "7.1.21", "8.1.1", "8.1.2", "8.1.3", "8.1.4", "8.1.5", "8.1.6", "8.1.7", "8.1.8", "8.1.9", "8.1.10", "8.1.11", "8.1.12", "8.1.13", "8.1.14", "8.1.15", "8.1.16", "8.1.17", "8.1.18", "8.1.19", "8.1.20", "8.1.21", "9.1.1", "9.1.2", "9.1.3", "9.1.4", "9.1.5", "9.1.6", "9.1.7", "9.1.8", "9.1.9", "9.1.10", "9.1.11", "9.1.12", "9.1.13", "9.1.14", "9.1.15", "9.1.16", "9.1.17", "9.1.18", "9.1.19", "9.1.20", "9.1.21", "10.1.1", "10.1.2", "10.1.3", "10.1.4", "10.1.5", "10.1.6", "10.1.7", "10.1.8", "10.1.9", "10.1.10", "10.1.11", "10.1.12", "10.1.13", "10.1.14", "10.1.15", "10.1.16", "10.1.17", "10.1.18", "10.1.19", "10.1.20", "10.1.21", "11.1.1", "11.1.2", "11.1.3", "11.1.4", "11.1.5", "11.1.6", "11.1.7", "11.1.8", "11.1.9", "11.1.10", "11.1.11", "11.1.12", "11.1.13", "11.1.14", "11.1.15", "11.1.16", "11.1.17", "11.1.18", "11.1.19", "11.1.20", "11.1.21", "12.1.1", "12.1.2", "12.1.3", "12.1.4", "12.1.5", "12.1.6", "12.1.7", "12.1.8", "12.1.9", "12.1.10", "12.1.11", "12.1.12", "12.1.13", "12.1.14", "12.1.15", "12.1.16", "12.1.17", "12.1.18", "12.1.19", "12.1.20", "12.1.21", "13.1.1", "13.1.2", "13.1.3", "13.1.4", "13.1.5", "13.1.6", "13.1.7", "13.1.8", "13.1.9", "13.1.10", "13.1.11", "13.1.12", "13.1.13", "13.1.14", "13.1.15", "13.1.16", "13.1.17", "13.1.18", "13.1.19", "13.1.20", "13.1.21", "14.1.1", "14.1.2", "14.1.3", "14.1.4", "14.1.5", "14.1.6", "14.1.7", "14.1.8", "14.1.9", "14.1.10", "14.1.11", "14.1.12", "14.1.13", "14.1.14", "14.1.15", "14.1.16", "14.1.17", "14.1.18", "14.1.19", "14.1.20", "14.1.21")
 
@@ -302,8 +311,7 @@ Clean_Building_Construction_Annually_Unajusted_Constant %>%
   relocate(`year_month`)  %>%  #place ref_date as first column
   select(!year_month_fd) %>% #get rid of useless columns
   select(!year_month_pc) -> #get rid of useless columns
-  Transit_Building_Construction_Annually_Unajusted_Constant
-
+Transit_Building_Construction_Annually_Unajusted_Constant
 
 as_tibble(Transit_Building_Construction_Annually_Unajusted_Constant) %>%
   pivot_wider(names_from = year_month, values_from = c(`value`, `value_fd`, `value_pc`)) %>%
@@ -326,6 +334,7 @@ interactive_table(Clean_Building_Construction_Annually_Unajusted_Constant)
 
 ```{r building Construction investment annually unajusted constant K$ Graph, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
 
+
 #graph 1 with constant value AB, QC, ON, BC
 Transit_Building_Construction_Annually_Unajusted_Constant %>%
   filter(geo %in% c("Quebec", "Ontario", "Alberta", "British Columbia")) %>%
@@ -334,6 +343,7 @@ Transit_Building_Construction_Annually_Unajusted_Constant %>%
   ggplot() +
   ggtitle("Investment in building construction, annually, unadjusted constant K$ \n AB, QC, ON, BC" ) +
   aes(x = year_month, y = value, colour = geo) +
+  #scale_x_continuous(breaks = seq(2018, 2020, by = 1), limits = c(2017, 2020))+ function not working
   xlab("Year") +
   ylab("Value \n ") +
   geom_line(size = 0.7) +
@@ -495,35 +505,35 @@ plotly::ggplotly(Clean_Building_Construction_Annually_Unadjusted_Constant_Graph_
 
 ### Investment in building construction, annually, unadjusted constant K$ Graph 4, Total value, first difference, QC, AB, BC, ON
 
-```{r building Construction investment annually unajusted constant K$ Graph 4, fig.height=6, fig.width=9,  layout="l-screen-inset",  echo=FALSE}
+```{r building Construction investment annually unajusted constant K$ Graph 4, fig.height=6, fig.width=8,  layout="l-screen-inset",  echo=FALSE}
 plotly::ggplotly(Clean_Building_Construction_Annually_Unadjusted_Constant_Graph_4, dynamicTicks =  TRUE)
 ```
 
 ### Investment in building construction, annually, unadjusted constant K$ Graph 5, Total value, first difference, MB, NB, NL, NS, PE, SK
 
-```{r building Construction investment annually unadjusted constant K$ Graph 5, fig.height=6, fig.width=9,  layout="l-screen-inset",  echo=FALSE}
+```{r building Construction investment annually unadjusted constant K$ Graph 5, fig.height=6, fig.width=8,  layout="l-screen-inset",  echo=FALSE}
 plotly::ggplotly(Clean_Building_Construction_Annually_Unadjusted_Constant_Graph_5, dynamicTicks =  TRUE)
 ```
 ### Investment in building construction, annually, unadjusted constant K$ Graph 6, Total value, first difference, NT, NU, YT
-```{r building Construction investment annually unajusted constant K$ Graph 6, fig.height=6, fig.width=9,  layout="l-screen-inset",  echo=FALSE}
+```{r building Construction investment annually unajusted constant K$ Graph 6, fig.height=6, fig.width=8,  layout="l-screen-inset",  echo=FALSE}
 plotly::ggplotly(Clean_Building_Construction_Annually_Unadjusted_Constant_Graph_6, dynamicTicks =  TRUE)
 ```
 
 ### Investment in building construction, annually, unadjusted constant K$ Graph 7, Total value, Percent change, QC, AB, BC, ON
 
-```{r building Construction investment annually unajusted constant K$ Graph 7, fig.height=6, fig.width=9,  layout="l-screen-inset",  echo=FALSE}
+```{r building Construction investment annually unajusted constant K$ Graph 7, fig.height=6, fig.width=8,  layout="l-screen-inset",  echo=FALSE}
 plotly::ggplotly(Clean_Building_Construction_Annually_Unadjusted_Constant_Graph_7, dynamicTicks =  TRUE)
 ```
 
 ### Investment in building construction, annually, unadjusted constant K$ Graph 8, Total value, Percent change, MB, NB, NL, NS, PE, SK
 
-```{r building Construction investment annually unajusted constant K$ Graph 8, fig.height=6, fig.width=9,  layout="l-screen-inset",  echo=FALSE}
+```{r building Construction investment annually unajusted constant K$ Graph 8, fig.height=6, fig.width=8,  layout="l-screen-inset",  echo=FALSE}
 plotly::ggplotly(Clean_Building_Construction_Annually_Unadjusted_Constant_Graph_8, dynamicTicks =  TRUE)
 ```
 
 
 ### Investment in building construction, annually, unadjusted constant K$ Graph 9, Total value, Percent change, NT, NU, YT
-```{r building Construction investment annually unajusted constant K$ Graph 9, fig.height=6, fig.width=9,  layout="l-screen-inset",  echo=FALSE}
+```{r building Construction investment annually unajusted constant K$ Graph 9, fig.height=6, fig.width=8,  layout="l-screen-inset",  echo=FALSE}
 plotly::ggplotly(Clean_Building_Construction_Annually_Unadjusted_Constant_Graph_9, dynamicTicks =  TRUE)
 ```
 
@@ -859,39 +869,39 @@ plotly::ggplotly(Clean_Building_Construction_Annually_Unadjusted_Current_Graph_3
 
 ### Investment in building construction, annually, unadjusted current C$ Graph 4, Total value, first difference QC, AB, BC, ON
 
-```{r building Construction investment annually unajusted current C$ Graph 4, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+```{r building Construction investment annually unajusted current C$ Graph 4, fig.height=6, fig.width=8, layout="l-screen-inset",  echo=FALSE}
 plotly::ggplotly(Clean_Building_Construction_Annually_Unadjusted_Current_Graph_4, dynamicTicks =  TRUE)
 ```
 
 
 ### Investment in building construction, annually, unadjusted current C$ Graph 5, Total value, first difference MB, NB, NL, NS, PE, SK
 
-```{r building Construction investment annually unadjusted current C$ Graph 5, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+```{r building Construction investment annually unadjusted current C$ Graph 5, fig.height=6, fig.width=8, layout="l-screen-inset",  echo=FALSE}
 plotly::ggplotly(Clean_Building_Construction_Annually_Unadjusted_Current_Graph_5, dynamicTicks =  TRUE)
 ```
 
 ### Investment in building construction, annually, unadjusted current C$ Graph 6, Total value, first difference NT, NU, YT
 
-```{r building Construction investment annually unajusted current C$ Graph 6, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+```{r building Construction investment annually unajusted current C$ Graph 6, fig.height=6, fig.width=8, layout="l-screen-inset",  echo=FALSE}
 plotly::ggplotly(Clean_Building_Construction_Annually_Unadjusted_Current_Graph_6, dynamicTicks =  TRUE)
 ```
 
 ### Investment in building construction, annually, unadjusted current C$ Graph 7, Total value, percent change, QC, AB, BC, ON
 
-```{r building Construction investment annually unajusted current C$ Graph 7, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+```{r building Construction investment annually unajusted current C$ Graph 7, fig.height=6, fig.width=8, layout="l-screen-inset",  echo=FALSE}
 plotly::ggplotly(Clean_Building_Construction_Annually_Unadjusted_Current_Graph_7, dynamicTicks =  TRUE)
 ```
 
 ### Investment in building construction, annually, unadjusted current C$ Graph 8, Total value, percent change, MB, NB, NL, NS, PE, SK
 
-```{r building Construction investment annually unajusted current C$ Graph 8, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+```{r building Construction investment annually unajusted current C$ Graph 8, fig.height=6, fig.width=8, layout="l-screen-inset",  echo=FALSE}
 plotly::ggplotly(Clean_Building_Construction_Annually_Unadjusted_Current_Graph_8, dynamicTicks =  TRUE)
 ```
 
 
 ### Investment in building construction, annually, unadjusted current C$ Graph 9, Total value, percent change, NT, NU, YT
 
-```{r building Construction investment annually unajusted current C$ Graph 9, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+```{r building Construction investment annually unajusted current C$ Graph 9, fig.height=6, fig.width=8, layout="l-screen-inset",  echo=FALSE}
 plotly::ggplotly(Clean_Building_Construction_Annually_Unadjusted_Current_Graph_9, dynamicTicks =  TRUE)
 ```
 
@@ -917,63 +927,106 @@ Building_Permits_Cbind %>%
     Building_Permits_Cbind
 
 
-
 #The data from cansim is limited to 300 vectors. Here, we will attempt to split our list of 300 vectors.
 #Also, the data is capped at 6000 data points so to access for historical data, we will use 200 vectors at a time. With 100 in order to have data up to 2017.
 #BPC = Building Permits Cbind    and BPV = Building Permits Vectors
 #note from Hugo, it would be more efficient in loadtime to wrap this section of the code in a single looping function. If I have time later, I need to work on this.
 
 #first we create the list of vectors to be used
-BPC1 <- Building_Permits_Cbind$vector[1:100]
-BPC2 <- Building_Permits_Cbind$vector[101:200]
-BPC3 <- Building_Permits_Cbind$vector[201:300]
-BPC4 <- Building_Permits_Cbind$vector[301:400]
-BPC5 <- Building_Permits_Cbind$vector[401:500]
-BPC6 <- Building_Permits_Cbind$vector[501:600]
-BPC7 <- Building_Permits_Cbind$vector[601:700]
-BPC8 <- Building_Permits_Cbind$vector[701:800]
-BPC9 <- Building_Permits_Cbind$vector[801:900]
-BPC10 <- Building_Permits_Cbind$vector[901:1000]
-BPC11 <- Building_Permits_Cbind$vector[1001:1100]
-BPC12 <- Building_Permits_Cbind$vector[1101:1200]
-BPC13 <- Building_Permits_Cbind$vector[1201:1300]
-BPC14 <- Building_Permits_Cbind$vector[1301:1400]
-BPC15 <- Building_Permits_Cbind$vector[1401:1500]
-BPC16 <- Building_Permits_Cbind$vector[1501:1600]
-BPC17 <- Building_Permits_Cbind$vector[1601:1700]
-BPC18 <- Building_Permits_Cbind$vector[1701:1800]
-BPC19 <- Building_Permits_Cbind$vector[1801:1900]
-BPC20 <- Building_Permits_Cbind$vector[1901:2000]
-BPC21 <- Building_Permits_Cbind$vector[2001:2100]
-BPC22 <- Building_Permits_Cbind$vector[2101:2184] 
+BPC1 <- Building_Permits_Cbind$vector[1:50]
+BPC2 <- Building_Permits_Cbind$vector[51:100]
+BPC3 <- Building_Permits_Cbind$vector[101:150]
+BPC4 <- Building_Permits_Cbind$vector[151:200]
+BPC5 <- Building_Permits_Cbind$vector[201:250]
+BPC6 <- Building_Permits_Cbind$vector[251:300]
+BPC7 <- Building_Permits_Cbind$vector[301:350]
+BPC8 <- Building_Permits_Cbind$vector[351:400]
+BPC9 <- Building_Permits_Cbind$vector[401:450]
+BPC10 <- Building_Permits_Cbind$vector[451:500]
+BPC11 <- Building_Permits_Cbind$vector[501:550]
+BPC12 <- Building_Permits_Cbind$vector[551:600]
+BPC13 <- Building_Permits_Cbind$vector[601:650]
+BPC14 <- Building_Permits_Cbind$vector[651:700]
+BPC15 <- Building_Permits_Cbind$vector[701:750]
+BPC16 <- Building_Permits_Cbind$vector[751:800]
+BPC17 <- Building_Permits_Cbind$vector[801:850]
+BPC18 <- Building_Permits_Cbind$vector[851:900]
+BPC19 <- Building_Permits_Cbind$vector[901:950]
+BPC20 <- Building_Permits_Cbind$vector[951:1000]
+BPC21 <- Building_Permits_Cbind$vector[1001:1050]
+BPC22 <- Building_Permits_Cbind$vector[1051:1100]
+BPC23 <- Building_Permits_Cbind$vector[1101:1150]
+BPC24 <- Building_Permits_Cbind$vector[1151:1200]
+BPC25 <- Building_Permits_Cbind$vector[1201:1250]
+BPC26 <- Building_Permits_Cbind$vector[1251:1300]
+BPC27 <- Building_Permits_Cbind$vector[1301:1350]
+BPC28 <- Building_Permits_Cbind$vector[1351:1400]
+BPC29 <- Building_Permits_Cbind$vector[1401:1450]
+BPC30 <- Building_Permits_Cbind$vector[1451:1500]
+BPC31 <- Building_Permits_Cbind$vector[1501:1550]
+BPC32 <- Building_Permits_Cbind$vector[1551:1600]
+BPC33 <- Building_Permits_Cbind$vector[1601:1650]
+BPC34 <- Building_Permits_Cbind$vector[1651:1700]
+BPC35 <- Building_Permits_Cbind$vector[1701:1750]
+BPC36 <- Building_Permits_Cbind$vector[1751:1800]
+BPC37 <- Building_Permits_Cbind$vector[1801:1850]
+BPC38 <- Building_Permits_Cbind$vector[1851:1900]
+BPC39 <- Building_Permits_Cbind$vector[1901:1950]
+BPC40 <- Building_Permits_Cbind$vector[1951:2000]
+BPC41 <- Building_Permits_Cbind$vector[2001:2050]
+BPC42 <- Building_Permits_Cbind$vector[2051:2100]
+BPC43 <- Building_Permits_Cbind$vector[2101:2150]
+BPC44 <- Building_Permits_Cbind$vector[2151:2184] 
 
 #then we seek the cansim vector based on the lists
-BPV1 <- cansim::get_cansim_vector_for_latest_periods(BPC1, periods = 60)
-BPV2 <- cansim::get_cansim_vector_for_latest_periods(BPC2, periods = 60)
-BPV3 <- cansim::get_cansim_vector_for_latest_periods(BPC3, periods = 60)
-BPV4 <- cansim::get_cansim_vector_for_latest_periods(BPC4, periods = 60)
-BPV5 <- cansim::get_cansim_vector_for_latest_periods(BPC5, periods = 60)
-BPV6 <- cansim::get_cansim_vector_for_latest_periods(BPC6, periods = 60)
-BPV7 <- cansim::get_cansim_vector_for_latest_periods(BPC7, periods = 60)
-BPV8 <- cansim::get_cansim_vector_for_latest_periods(BPC8, periods = 60)
-BPV9 <- cansim::get_cansim_vector_for_latest_periods(BPC9, periods = 60)
-BPV10 <- cansim::get_cansim_vector_for_latest_periods(BPC10, periods = 60)
-BPV11 <- cansim::get_cansim_vector_for_latest_periods(BPC11, periods = 60)
-BPV12 <- cansim::get_cansim_vector_for_latest_periods(BPC12, periods = 60)
-BPV13 <- cansim::get_cansim_vector_for_latest_periods(BPC13, periods = 60)
-BPV14 <- cansim::get_cansim_vector_for_latest_periods(BPC14, periods = 60)
-BPV15 <- cansim::get_cansim_vector_for_latest_periods(BPC15, periods = 60)
-BPV16 <- cansim::get_cansim_vector_for_latest_periods(BPC16, periods = 60)
-BPV17 <- cansim::get_cansim_vector_for_latest_periods(BPC17, periods = 60)
-BPV18 <- cansim::get_cansim_vector_for_latest_periods(BPC18, periods = 60)
-BPV19 <- cansim::get_cansim_vector_for_latest_periods(BPC19, periods = 60)
-BPV20 <- cansim::get_cansim_vector_for_latest_periods(BPC20, periods = 60)
-BPV21 <- cansim::get_cansim_vector_for_latest_periods(BPC21, periods = 60)
-BPV22 <- cansim::get_cansim_vector_for_latest_periods(BPC22, periods = 60)
+BPV1 <- cansim::get_cansim_vector_for_latest_periods(BPC1, periods = 120)
+BPV2 <- cansim::get_cansim_vector_for_latest_periods(BPC2, periods = 120)
+BPV3 <- cansim::get_cansim_vector_for_latest_periods(BPC3, periods = 120)
+BPV4 <- cansim::get_cansim_vector_for_latest_periods(BPC4, periods = 120)
+BPV5 <- cansim::get_cansim_vector_for_latest_periods(BPC5, periods = 120)
+BPV6 <- cansim::get_cansim_vector_for_latest_periods(BPC6, periods = 120)
+BPV7 <- cansim::get_cansim_vector_for_latest_periods(BPC7, periods = 120)
+BPV8 <- cansim::get_cansim_vector_for_latest_periods(BPC8, periods = 120)
+BPV9 <- cansim::get_cansim_vector_for_latest_periods(BPC9, periods = 120)
+BPV10 <- cansim::get_cansim_vector_for_latest_periods(BPC10, periods = 120)
+BPV11 <- cansim::get_cansim_vector_for_latest_periods(BPC11, periods = 120)
+BPV12 <- cansim::get_cansim_vector_for_latest_periods(BPC12, periods = 120)
+BPV13 <- cansim::get_cansim_vector_for_latest_periods(BPC13, periods = 120)
+BPV14 <- cansim::get_cansim_vector_for_latest_periods(BPC14, periods = 120)
+BPV15 <- cansim::get_cansim_vector_for_latest_periods(BPC15, periods = 120)
+BPV16 <- cansim::get_cansim_vector_for_latest_periods(BPC16, periods = 120)
+BPV17 <- cansim::get_cansim_vector_for_latest_periods(BPC17, periods = 120)
+BPV18 <- cansim::get_cansim_vector_for_latest_periods(BPC18, periods = 120)
+BPV19 <- cansim::get_cansim_vector_for_latest_periods(BPC19, periods = 120)
+BPV20 <- cansim::get_cansim_vector_for_latest_periods(BPC20, periods = 120)
+BPV21 <- cansim::get_cansim_vector_for_latest_periods(BPC21, periods = 120)
+BPV22 <- cansim::get_cansim_vector_for_latest_periods(BPC22, periods = 120)
+BPV23 <- cansim::get_cansim_vector_for_latest_periods(BPC23, periods = 120)
+BPV24 <- cansim::get_cansim_vector_for_latest_periods(BPC24, periods = 120)
+BPV25 <- cansim::get_cansim_vector_for_latest_periods(BPC25, periods = 120)
+BPV26 <- cansim::get_cansim_vector_for_latest_periods(BPC26, periods = 120)
+BPV27 <- cansim::get_cansim_vector_for_latest_periods(BPC27, periods = 120)
+BPV28 <- cansim::get_cansim_vector_for_latest_periods(BPC28, periods = 120)
+BPV29 <- cansim::get_cansim_vector_for_latest_periods(BPC29, periods = 120)
+BPV30 <- cansim::get_cansim_vector_for_latest_periods(BPC30, periods = 120)
+BPV31 <- cansim::get_cansim_vector_for_latest_periods(BPC31, periods = 120)
+BPV32 <- cansim::get_cansim_vector_for_latest_periods(BPC32, periods = 120)
+BPV33 <- cansim::get_cansim_vector_for_latest_periods(BPC33, periods = 120)
+BPV34 <- cansim::get_cansim_vector_for_latest_periods(BPC34, periods = 120)
+BPV35 <- cansim::get_cansim_vector_for_latest_periods(BPC35, periods = 120)
+BPV36 <- cansim::get_cansim_vector_for_latest_periods(BPC36, periods = 120)
+BPV37 <- cansim::get_cansim_vector_for_latest_periods(BPC37, periods = 120)
+BPV38 <- cansim::get_cansim_vector_for_latest_periods(BPC38, periods = 120)
+BPV39 <- cansim::get_cansim_vector_for_latest_periods(BPC39, periods = 120)
+BPV40 <- cansim::get_cansim_vector_for_latest_periods(BPC40, periods = 120)
+BPV41 <- cansim::get_cansim_vector_for_latest_periods(BPC41, periods = 120)
+BPV42 <- cansim::get_cansim_vector_for_latest_periods(BPC42, periods = 120)
+BPV43 <- cansim::get_cansim_vector_for_latest_periods(BPC43, periods = 120)
+BPV44 <- cansim::get_cansim_vector_for_latest_periods(BPC44, periods = 120)
 
 
 #row bind the vectors into a data table
-BPVX <- rbind(BPV1,BPV2, BPV3, BPV4, BPV5, BPV6, BPV7, BPV8, BPV9, BPV10, BPV11, BPV12, BPV13, BPV14, BPV15, BPV16, BPV17, BPV18, BPV19, BPV20, BPV21, BPV22)
+BPVX <- rbind(BPV1, BPV2, BPV3, BPV4, BPV5, BPV6, BPV7, BPV8, BPV9, BPV10, BPV11, BPV12, BPV13, BPV14, BPV15, BPV16, BPV17, BPV18, BPV19, BPV20, BPV21, BPV22, BPV23, BPV24, BPV25, BPV26, BPV27, BPV28, BPV29, BPV30, BPV31, BPV32, BPV33, BPV34, BPV35, BPV36, BPV37, BPV38, BPV39, BPV40, BPV41, BPV42, BPV43, BPV44)
 
 BPVX <- janitor::clean_names(BPVX) #remove capital letters in column names
 
@@ -1228,37 +1281,37 @@ plotly::ggplotly(Clean_Building_Permits_Residential_Annually_Unadjusted_Current_
 
 ### Building permits, residential values and number of units, by type of dwelling, annual, unadjusted current (x1,000), first difference, Graph 4, QC, AB, BC, ON
 
-```{r Building permits residential values and number of units by type of dwelling annual unajusted current x1000 Graph 4, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+```{r Building permits residential values and number of units by type of dwelling annual unajusted current x1000 Graph 4, fig.height=6, fig.width=8, layout="l-screen-inset",  echo=FALSE}
 plotly::ggplotly(Clean_Building_Permits_Residential_Annually_Unadjusted_Current_Graph_4, dynamicTicks =  TRUE)
 ```
 
 ## Building permits, residential values and number of units, by type of dwelling, annual unadjusted current (x1,000), first difference, Graph 5, MB, NB, NL, NS, PE, SK
 
-```{r Building permits residential values and number of units by type of dwelling annual unajusted current x1000 Graph 5, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+```{r Building permits residential values and number of units by type of dwelling annual unajusted current x1000 Graph 5, fig.height=6, fig.width=8, layout="l-screen-inset",  echo=FALSE}
 plotly::ggplotly(Clean_Building_Permits_Residential_Annually_Unadjusted_Current_Graph_5, dynamicTicks =  TRUE)
 ```
 
 ### Building permits, residential values and number of units, by type of dwelling, annual, unadjusted current (x1,000), first difference, Graph 6, NT, NU, YT
 
-```{r Building permits residential values and number of units by type of dwelling annual unajusted current x1000 Graph 6, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+```{r Building permits residential values and number of units by type of dwelling annual unajusted current x1000 Graph 6, fig.height=6, fig.width=8, layout="l-screen-inset",  echo=FALSE}
 plotly::ggplotly(Clean_Building_Permits_Residential_Annually_Unadjusted_Current_Graph_6, dynamicTicks =  TRUE)
 ```
 
 ### Building permits, residential values and number of units, by type of dwelling, annual, unadjusted current (x1,000), percent change, Graph 7, QC, AB, BC, ON
 
-```{r Building permits residential values and number of units by type of dwelling annual unajusted current x1000 Graph 7, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+```{r Building permits residential values and number of units by type of dwelling annual unajusted current x1000 Graph 7, fig.height=6, fig.width=8, layout="l-screen-inset",  echo=FALSE}
 plotly::ggplotly(Clean_Building_Permits_Residential_Annually_Unadjusted_Current_Graph_7, dynamicTicks =  TRUE)
 ```
 
 ### Building permits, residential values and number of units, by type of dwelling, annual unadjusted current (x1,000), percent change, Graph 8, MB, NB, NL, NS, PE, SK
 
-```{r Building permits residential values and number of units by type of dwelling annual unajusted current x1000 Graph 8, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+```{r Building permits residential values and number of units by type of dwelling annual unajusted current x1000 Graph 8, fig.height=6, fig.width=8, layout="l-screen-inset",  echo=FALSE}
 plotly::ggplotly(Clean_Building_Permits_Residential_Annually_Unadjusted_Current_Graph_8, dynamicTicks =  TRUE)
 ```
 
 ### Building permits, residential values and number of units, by type of dwelling, annual, unadjusted current (x1,000), percent change, Graph 9, NT, NU, YT
 
-```{r Building permits residential values and number of units by type of dwelling annual unajusted current x1000 Graph 9, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+```{r Building permits residential values and number of units by type of dwelling annual unajusted current x1000 Graph 9, fig.height=6, fig.width=8, layout="l-screen-inset",  echo=FALSE}
 plotly::ggplotly(Clean_Building_Permits_Residential_Annually_Unadjusted_Current_Graph_9, dynamicTicks =  TRUE)
 ```
 
@@ -1509,37 +1562,37 @@ plotly::ggplotly(Clean_Building_Permits_NonResidential_Annually_Unadjusted_Curre
 
 ### Building permits, Non-residential values and number of units, by type of dwelling, annual, unadjusted current (x1,000), first difference, Graph 4 - QC, AB, BC, ON
 
-```{r Building permits NonResidential values and number of units by type of dwelling annual unajusted current x1000 Graph 4, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+```{r Building permits NonResidential values and number of units by type of dwelling annual unajusted current x1000 Graph 4, fig.height=6, fig.width=8, layout="l-screen-inset",  echo=FALSE}
 plotly::ggplotly(Clean_Building_Permits_NonResidential_Annually_Unadjusted_Current_Graph_4, dynamicTicks =  TRUE)
 ```
 
 ### Building permits, Non-residential values and number of units, by type of dwelling, annual, unadjusted current (x1,000), first difference, Graph 5 - MB, NB, NL, NS, PE, SK
 
-```{r Building permits NonResidential values and number of units by type of dwelling annual unajusted current x1000 Graph 5, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+```{r Building permits NonResidential values and number of units by type of dwelling annual unajusted current x1000 Graph 5, fig.height=6, fig.width=8, layout="l-screen-inset",  echo=FALSE}
 plotly::ggplotly(Clean_Building_Permits_NonResidential_Annually_Unadjusted_Current_Graph_5, dynamicTicks =  TRUE)
 ```
 
 ### Building permits, Non-residential values and number of units, by type of dwelling, annual, unadjusted current (x1,000), first difference, Graph 6 - NT, NU, YT
 
-```{r Building permits NonResidential values and number of units by type of dwelling annual unajusted current x1000 Graph 6, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+```{r Building permits NonResidential values and number of units by type of dwelling annual unajusted current x1000 Graph 6, fig.height=6, fig.width=8, layout="l-screen-inset",  echo=FALSE}
 plotly::ggplotly(Clean_Building_Permits_NonResidential_Annually_Unadjusted_Current_Graph_6, dynamicTicks =  TRUE)
 ```
 
 ### Building permits, Non-residential values and number of units, by type of dwelling, annual, unadjusted current, percent change, Graph 7 - QC, AB, BC, ON
 
-```{r Building permits NonResidential values and number of units by type of dwelling annual unajusted current x1000 Graph 7, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+```{r Building permits NonResidential values and number of units by type of dwelling annual unajusted current x1000 Graph 7, fig.height=6, fig.width=8, layout="l-screen-inset",  echo=FALSE}
 plotly::ggplotly(Clean_Building_Permits_NonResidential_Annually_Unadjusted_Current_Graph_7, dynamicTicks =  TRUE)
 ```
 
 ### Building permits, Non-residential values and number of units, by type of dwelling, annual, unadjusted current, percent change, Graph 8 - MB, NB, NL, NS, PE, SK
 
-```{r Building permits NonResidential values and number of units by type of dwelling annual unajusted current x1000 Graph 8, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+```{r Building permits NonResidential values and number of units by type of dwelling annual unajusted current x1000 Graph 8, fig.height=6, fig.width=8, layout="l-screen-inset",  echo=FALSE}
 plotly::ggplotly(Clean_Building_Permits_NonResidential_Annually_Unadjusted_Current_Graph_8, dynamicTicks =  TRUE)
 ```
 
 ### Building permits, Non-residential values and number of units, by type of dwelling, annual, unadjusted current, percent change, Graph 9 - NT, NU, YT
 
-```{r Building permits NonResidential values and number of units by type of dwelling annual unajusted current x1000 Graph 9, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+```{r Building permits NonResidential values and number of units by type of dwelling annual unajusted current x1000 Graph 9, fig.height=6, fig.width=8, layout="l-screen-inset",  echo=FALSE}
 plotly::ggplotly(Clean_Building_Permits_NonResidential_Annually_Unadjusted_Current_Graph_9, dynamicTicks =  TRUE)
 ```
 
@@ -1769,37 +1822,37 @@ plotly::ggplotly(Clean_Building_Permits_Residential_Annually_Unadjusted_Constant
 
 ### Building permits, residential values of permits, by type of dwelling, annual, unadjusted constant (x1,000), first difference, Graph 4, QC, AB, BC, ON
 
-```{r Building permits Residential values of permits by type of dwelling annual unajusted constant x1000 Graph 4, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+```{r Building permits Residential values of permits by type of dwelling annual unajusted constant x1000 Graph 4, fig.height=6, fig.width=8, layout="l-screen-inset",  echo=FALSE}
 plotly::ggplotly(Clean_Building_Permits_Residential_Annually_Unadjusted_Constant_Graph_4, dynamicTicks =  TRUE)
 ```
 
 ### Building permits, residential values of permits, by type of dwelling, annual, unadjusted constant (x1,000), first difference, Graph 5, MB, NB, NL, NS, PE, SK
 
-```{r Building permits Residential values of permits by type of dwelling annual unajusted constant x1000 Graph 5, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+```{r Building permits Residential values of permits by type of dwelling annual unajusted constant x1000 Graph 5, fig.height=6, fig.width=8, layout="l-screen-inset",  echo=FALSE}
 plotly::ggplotly(Clean_Building_Permits_Residential_Annually_Unadjusted_Constant_Graph_5, dynamicTicks =  TRUE)
 ```
 
 ### Building permits, residential values of permits, by type of dwelling, annual, unadjusted constant (x1,000), first difference, Graph 6, NT, NU, YT
 
-```{r Building permits Residential values of permits by type of dwelling annual unajusted constant x1000 Graph 6, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+```{r Building permits Residential values of permits by type of dwelling annual unajusted constant x1000 Graph 6, fig.height=6, fig.width=8, layout="l-screen-inset",  echo=FALSE}
 plotly::ggplotly(Clean_Building_Permits_Residential_Annually_Unadjusted_Constant_Graph_6, dynamicTicks =  TRUE)
 ```
 
 ### Building permits, residential values of permits, by type of dwelling, annual, unadjusted constant (x1,000), percent change, Graph 7, QC, AB, BC, ON
 
-```{r Building permits Residential values of permits by type of dwelling annual unajusted constant x1000 Graph 7, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+```{r Building permits Residential values of permits by type of dwelling annual unajusted constant x1000 Graph 7, fig.height=6, fig.width=8, layout="l-screen-inset",  echo=FALSE}
 plotly::ggplotly(Clean_Building_Permits_Residential_Annually_Unadjusted_Constant_Graph_7, dynamicTicks =  TRUE)
 ```
 
 ### Building permits, residential values of permits, by type of dwelling, annual, unadjusted constant (x1,000), percent change, Graph 8, MB, NB, NL, NS, PE, SK
 
-```{r Building permits Residential values of permits by type of dwelling annual unajusted constant x1000 Graph 8, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+```{r Building permits Residential values of permits by type of dwelling annual unajusted constant x1000 Graph 8, fig.height=6, fig.width=8, layout="l-screen-inset",  echo=FALSE}
 plotly::ggplotly(Clean_Building_Permits_Residential_Annually_Unadjusted_Constant_Graph_8, dynamicTicks =  TRUE)
 ```
 
 ### Building permits, residential values of permits, by type of dwelling, annual, unadjusted constant (x1,000), percent change, Graph 9, NT, NU, YT
 
-```{r Building permits Residential values of permits by type of dwelling annual unajusted constant x1000 Graph 9, fig.height=6, fig.width=9, layout="l-screen-inset",  echo=FALSE}
+```{r Building permits Residential values of permits by type of dwelling annual unajusted constant x1000 Graph 9, fig.height=6, fig.width=8, layout="l-screen-inset",  echo=FALSE}
 plotly::ggplotly(Clean_Building_Permits_Residential_Annually_Unadjusted_Constant_Graph_9, dynamicTicks =  TRUE)
 ```
 
@@ -2032,37 +2085,37 @@ plotly::ggplotly(Clean_Building_Permits_NonResidential_Annually_Unadjusted_Const
 
 ### Building permits, non-residential values of permits, by type of dwelling, annual, unadjusted constant (x1,000), first difference, Graph 4, QC, AB, BC, ON
 
-```{r Graph 4 Building permits NonResidential unajusted constant x1000, fig.height=6,  echo=FALSE, fig.width=9, layout="l-screen-inset"}
+```{r Graph 4 Building permits NonResidential unajusted constant x1000, fig.height=6,  echo=FALSE, fig.width=8, layout="l-screen-inset"}
 plotly::ggplotly(Clean_Building_Permits_NonResidential_Annually_Unadjusted_Constant_Graph_4, dynamicTicks =  TRUE)
 ```
 
 ### Building permits, non-residential values of permits, by type of dwelling, annual, unadjusted constant (x1,000), first difference, Graph 5, MB, NB, NL, NS, PE, SK
 
-```{r Graph 5 Building permits NonResidential unajusted constant x1000, fig.height=6,  echo=FALSE, fig.width=9, layout="l-screen-inset"}
+```{r Graph 5 Building permits NonResidential unajusted constant x1000, fig.height=6,  echo=FALSE, fig.width=8, layout="l-screen-inset"}
 plotly::ggplotly(Clean_Building_Permits_NonResidential_Annually_Unadjusted_Constant_Graph_5, dynamicTicks =  TRUE)
 ```
 
 ### Building permits, non-residential values of permits, by type of dwelling, annual, unadjusted constant (x1,000), first difference, Graph 6, NT, NU, YT
 
-```{r Graph 6 Building permits NonResidential unajusted constant x1000, fig.height=6,  echo=FALSE, fig.width=9, layout="l-screen-inset"}
+```{r Graph 6 Building permits NonResidential unajusted constant x1000, fig.height=6,  echo=FALSE, fig.width=8, layout="l-screen-inset"}
 plotly::ggplotly(Clean_Building_Permits_NonResidential_Annually_Unadjusted_Constant_Graph_6, dynamicTicks =  TRUE)
 ```
 
 ### Building permits, non-residential values of permits, by type of dwelling, annual, unadjusted constant, percent change, Graph 7, QC, AB, BC, ON
 
-```{r Graph 7 Building permits NonResidential unajusted constant x1000, fig.height=6,  echo=FALSE, fig.width=9, layout="l-screen-inset"}
+```{r Graph 7 Building permits NonResidential unajusted constant x1000, fig.height=6,  echo=FALSE, fig.width=8, layout="l-screen-inset"}
 plotly::ggplotly(Clean_Building_Permits_NonResidential_Annually_Unadjusted_Constant_Graph_7, dynamicTicks =  TRUE)
 ```
 
 ### Building permits, non-residential values of permits, by type of dwelling, annual, unadjusted constant, percent change, Graph 8, MB, NB, NL, NS, PE, SK
 
-```{r Graph 8 Building permits NonResidential unajusted constant x1000, fig.height=6,  echo=FALSE, fig.width=9, layout="l-screen-inset"}
+```{r Graph 8 Building permits NonResidential unajusted constant x1000, fig.height=6,  echo=FALSE, fig.width=8, layout="l-screen-inset"}
 plotly::ggplotly(Clean_Building_Permits_NonResidential_Annually_Unadjusted_Constant_Graph_8, dynamicTicks =  TRUE)
 ```
 
 ### Building permits, non-residential values of permits, by type of dwelling, annual, unadjusted constant, percent change, Graph 9, NT, NU, YT
 
-```{r Graph 9 Building permits NonResidential unadjusted constant x1000, fig.height=6,  echo=FALSE, fig.width=9, layout="l-screen-inset"}
+```{r Graph 9 Building permits NonResidential unadjusted constant x1000, fig.height=6,  echo=FALSE, fig.width=8, layout="l-screen-inset"}
 plotly::ggplotly(Clean_Building_Permits_NonResidential_Annually_Unadjusted_Constant_Graph_9, dynamicTicks =  TRUE)
 ```
 
@@ -2308,36 +2361,36 @@ plotly::ggplotly(Clean__Capital_Repair_Expenditure_Annually_Graph_3, dynamicTick
 
 ### Capital and repair expenditures (1,000,000) Graph 4, all industry, first difference, QC, AB, BC, ON
 
-```{r Capital and repair expenditures x1000000 Graph 4,  echo=FALSE, fig.height=6, fig.width=9, layout="l-screen-inset"}
+```{r Capital and repair expenditures x1000000 Graph 4,  echo=FALSE, fig.height=6, fig.width=8, layout="l-screen-inset"}
 plotly::ggplotly(Clean__Capital_Repair_Expenditure_Annually_Graph_4, dynamicTicks =  TRUE)
 ```
 
 ### Capital and repair expenditures (1,000,000) Graph 5, all industry, first difference,  MB, NB, NL, NS, PE, SK
 
-```{r Capital and repair expenditures x1000000 Graph 5,  echo=FALSE, fig.height=6, fig.width=9, layout="l-screen-inset"}
+```{r Capital and repair expenditures x1000000 Graph 5,  echo=FALSE, fig.height=6, fig.width=8, layout="l-screen-inset"}
 plotly::ggplotly(Clean__Capital_Repair_Expenditure_Annually_Graph_5, dynamicTicks =  TRUE)
 ```
 
 ### Capital and repair expenditures (1,000,000) Graph 6, all industry, first difference, NT, NU, YT
 
-```{r Capital and repair expenditures x1000000 Graph 6,  echo=FALSE, fig.height=6, fig.width=9, layout="l-screen-inset"}
+```{r Capital and repair expenditures x1000000 Graph 6,  echo=FALSE, fig.height=6, fig.width=8, layout="l-screen-inset"}
 plotly::ggplotly(Clean__Capital_Repair_Expenditure_Annually_Graph_6, dynamicTicks =  TRUE)
 ```
 
 ### Capital and repair expenditures Graph 7, all industry, percent change, QC, AB, BC, ON
 
-```{r Capital and repair expenditures x1000000 Graph 7,  echo=FALSE, fig.height=6, fig.width=9, layout="l-screen-inset"}
+```{r Capital and repair expenditures x1000000 Graph 7,  echo=FALSE, fig.height=6, fig.width=8, layout="l-screen-inset"}
 plotly::ggplotly(Clean__Capital_Repair_Expenditure_Annually_Graph_7, dynamicTicks =  TRUE)
 ```
 
 ### Capital and repair expenditures Graph 8, all industry, percent change,  MB, NB, NL, NS, PE, SK
 
-```{r Capital and repair expenditures x1000000 Graph 8,  echo=FALSE, fig.height=6, fig.width=9, layout="l-screen-inset"}
+```{r Capital and repair expenditures x1000000 Graph 8,  echo=FALSE, fig.height=6, fig.width=8, layout="l-screen-inset"}
 plotly::ggplotly(Clean__Capital_Repair_Expenditure_Annually_Graph_8, dynamicTicks =  TRUE)
 ```
 
 ### Capital and repair expenditures Graph 9, all industry, percent change, NT, NU, YT
 
-```{r Capital and repair expenditures x1000000 Graph 9,  echo=FALSE, fig.height=6, fig.width=9, layout="l-screen-inset"}
+```{r Capital and repair expenditures x1000000 Graph 9,  echo=FALSE, fig.height=6, fig.width=8, layout="l-screen-inset"}
 plotly::ggplotly(Clean__Capital_Repair_Expenditure_Annually_Graph_9, dynamicTicks =  TRUE)
 ```
